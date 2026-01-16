@@ -6,7 +6,7 @@ const ASSETS = [
   "./app.js",
   "./idb.js",
   "./manifest.json",
-  "./vendor/jszip.min.js"
+  "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
 ];
 
 self.addEventListener("install", (e)=>{
