@@ -1,4 +1,4 @@
-const CACHE = "mv_mobile_logger_v2"; // změň na v2 když chceš "hard update"
+const CACHE = "mv_mobile_logger_v3"; // změň na v2 když chceš "hard update"
 const ASSETS = [
   "./",
   "./index.html",
