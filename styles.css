@@ -1,50 +1,112 @@
+:root{
+  /* Sunlight / high-contrast theme */
+  --bg:#eef1f5;            /* světle šedá */
+  --card:#ffffff;          /* karty bílé */
+  --card2:#f7f8fb;         /* jemnej gradient */
+  --txt:#0f172a;           /* téměř černá */
+  --muted:#475569;         /* čitelná šedá */
+  --line:rgba(15,23,42,.12);
+
+  --ok:#0ea85f;
+  --bad:#e11d48;
+  --warn:#b45309;
+  --accent:#2563eb;
+
+  --shadow: 0 10px 25px rgba(15,23,42,.08);
+  --r:18px;
+}
+
+*{box-sizing:border-box}
+html,body{
+  margin:0;
+  height:100%;
+  background:var(--bg);
+  color:var(--txt);
+  font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
+}
+a{color:var(--accent)}
+
+/* ----------------- Tablet shell layout (sidebar + content) ----------------- */
 .shell{
   min-height:100vh;
   display:grid;
   grid-template-columns: 280px 1fr;
 }
+
 .sidebar{
-  position:sticky; top:0;
+  position:sticky;
+  top:0;
   height:100vh;
   padding:14px;
   border-right:1px solid var(--line);
-  background:rgba(11,15,24,.9);
+  background:rgba(238,241,245,.92);
   backdrop-filter: blur(10px);
   display:flex;
   flex-direction:column;
   gap:14px;
 }
+
 .content{min-width:0;}
+
 .topbar{
-  position:sticky; top:0; z-index:10;
-  display:flex; align-items:center; justify-content:space-between;
+  position:sticky;
+  top:0;
+  z-index:10;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
   padding:12px 14px;
   border-bottom:1px solid var(--line);
-  background:rgba(11,15,24,.75);
+  background:rgba(238,241,245,.85);
   backdrop-filter: blur(10px);
 }
-.topTitle{font-weight:800}
+
+.topTitle{font-weight:850; letter-spacing:.2px;}
 .topPills{display:flex; gap:8px; flex-wrap:wrap}
 
-.sbBrand{display:flex; gap:10px; align-items:center; padding:10px; border:1px solid var(--line); border-radius:16px; background:rgba(255,255,255,.04)}
-.sbTitle{font-weight:800}
+.sbBrand{
+  display:flex;
+  gap:10px;
+  align-items:center;
+  padding:12px;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:rgba(15,23,42,.02);
+  box-shadow:var(--shadow);
+}
+.dot{
+  width:12px;
+  height:12px;
+  border-radius:999px;
+  background:linear-gradient(135deg,var(--accent),var(--ok));
+}
+.sbTitle{font-weight:850; letter-spacing:.2px;}
 .sbSub{font-size:12px;color:var(--muted);margin-top:2px}
 
 .sbNav{display:grid; gap:10px}
 .sbBtn{
   width:100%;
   text-align:left;
-  padding:12px 12px;
-  border-radius:14px;
+  padding:14px 14px;
+  min-height:52px;               /* tap target */
+  border-radius:16px;
   border:1px solid var(--line);
-  background:rgba(255,255,255,.04);
+  background:#fff;
   color:var(--txt);
-  font-weight:700;
+  font-weight:800;
   cursor:pointer;
+  box-shadow: 0 6px 14px rgba(15,23,42,.06);
 }
-.sbBtn:hover{filter:brightness(1.06)}
-.sbFoot{margin-top:auto; display:grid; gap:10px}
+.sbBtn:hover{filter:brightness(0.98)}
+.sbBtn:active{transform:translateY(1px)}
 
+.sbFoot{
+  margin-top:auto;
+  display:grid;
+  gap:10px;
+}
+
+/* Mobile: sidebar nahoře */
 @media (max-width: 860px){
   .shell{grid-template-columns: 1fr;}
   .sidebar{
@@ -55,120 +117,213 @@
   }
 }
 
-:root{
-  --bg:#0b0f18;
-  --card:#121a2a;
-  --card2:#0f1624;
-  --txt:#e9eefc;
-  --muted:#a8b3d6;
-  --line:rgba(255,255,255,.08);
-  --ok:#39d98a;
-  --bad:#ff5c7a;
-  --warn:#ffcc66;
-  --accent:#6ea8ff;
-  --shadow: 0 10px 30px rgba(0,0,0,.35);
-  --r:16px;
+/* ----------------- App container ----------------- */
+.app{
+  padding:14px;
+  max-width:900px;
+  margin:0 auto;
 }
-
-*{box-sizing:border-box}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial}
-a{color:var(--accent)}
-.topbar{
-  position:sticky; top:0; z-index:10;
-  display:flex; align-items:center; justify-content:space-between;
-  padding:12px 14px; background:rgba(11,15,24,.85); backdrop-filter: blur(10px);
-  border-bottom:1px solid var(--line);
-}
-.brand{display:flex; gap:10px; align-items:center}
-.dot{width:12px;height:12px;border-radius:99px;background:linear-gradient(135deg,var(--accent),var(--ok))}
-.title{font-weight:750;letter-spacing:.2px}
-.sub{font-size:12px;color:var(--muted);margin-top:2px}
-
-.app{padding:14px; max-width:900px; margin:0 auto}
 
 .grid{display:grid; gap:12px}
-@media (min-width:760px){ .grid.two{grid-template-columns:1fr 1fr} }
+@media (min-width:760px){
+  .grid.two{grid-template-columns:1fr 1fr}
+}
 
+/* ----------------- Cards / sections ----------------- */
 .card{
   background:linear-gradient(180deg,var(--card),var(--card2));
   border:1px solid var(--line);
   border-radius:var(--r);
   box-shadow:var(--shadow);
-  padding:14px;
+  padding:16px;
 }
-.card h2{margin:0 0 8px 0; font-size:16px}
-.card p{margin:6px 0; color:var(--muted); line-height:1.35}
 
-.row{display:flex; gap:10px; flex-wrap:wrap; align-items:center}
+.card h2{
+  margin:0 0 10px 0;
+  font-size:16px;
+  letter-spacing:.2px;
+  font-weight:850;
+}
+
+.card p{
+  margin:6px 0;
+  color:var(--muted);
+  line-height:1.35;
+}
+
+.row{
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+  align-items:center;
+}
 .spacer{flex:1}
-.hr{height:1px;background:var(--line);margin:12px 0}
+.hr{
+  height:1px;
+  background:var(--line);
+  margin:12px 0;
+}
 
+/* ----------------- Buttons ----------------- */
 .btn{
   border:1px solid var(--line);
-  background:#1a2640;
+  background:#ffffff;
   color:var(--txt);
-  padding:10px 12px;
-  border-radius:14px;
-  font-weight:650;
+  padding:14px 16px;
+  border-radius:16px;
+  font-weight:850;
   cursor:pointer;
+  min-height:52px;               /* tap target */
+  box-shadow: 0 6px 14px rgba(15,23,42,.06);
 }
-.btn:hover{filter:brightness(1.05)}
-.btn:disabled{opacity:.45;cursor:not-allowed}
-.btn.ok{background:rgba(57,217,138,.18);border-color:rgba(57,217,138,.35)}
-.btn.bad{background:rgba(255,92,122,.18);border-color:rgba(255,92,122,.35)}
-.btn.ghost{background:transparent}
+.btn:hover{filter:brightness(0.98)}
+.btn:active{transform:translateY(1px)}
+.btn:disabled{opacity:.5;cursor:not-allowed; box-shadow:none}
 
+.btn.ok{
+  background:rgba(14,168,95,.10);
+  border-color:rgba(14,168,95,.28);
+}
+.btn.bad{
+  background:rgba(225,29,72,.10);
+  border-color:rgba(225,29,72,.28);
+}
+.btn.ghost{
+  background:transparent;
+  box-shadow:none;
+}
+
+/* ----------------- Inputs ----------------- */
 .inp, select, textarea{
   width:100%;
-  background:#0e1526;
+  background:#fff;
   color:var(--txt);
   border:1px solid var(--line);
-  border-radius:14px;
-  padding:10px 12px;
+  border-radius:16px;
+  padding:14px 14px;
   outline:none;
+  min-height:52px;
+  font-size:16px; /* iOS: zabrání zoomu */
 }
-textarea{min-height:90px; resize:vertical}
-label{font-size:12px;color:var(--muted);display:block;margin:10px 0 6px}
 
+textarea{
+  min-height:120px;
+  resize:vertical;
+}
+
+label{
+  font-size:12px;
+  color:var(--muted);
+  display:block;
+  margin:10px 0 6px;
+}
+
+/* ----------------- Pills / badges ----------------- */
 .pill{
-  display:inline-flex; align-items:center; gap:8px;
-  padding:6px 10px; border-radius:999px;
-  background:rgba(255,255,255,.06);
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 12px;
+  border-radius:999px;
+  background:rgba(15,23,42,.04);
   border:1px solid var(--line);
   color:var(--muted);
-  font-size:12px;
+  font-size:13px;
+  font-weight:750;
 }
-.pill.ok{color:#bff7da;border-color:rgba(57,217,138,.35); background:rgba(57,217,138,.12)}
-.pill.warn{color:#ffe2a6;border-color:rgba(255,204,102,.35); background:rgba(255,204,102,.12)}
-.pill.bad{color:#ffb8c5;border-color:rgba(255,92,122,.35); background:rgba(255,92,122,.12)}
 
+.pill.ok{
+  color:#0b5f3b;
+  border-color:rgba(14,168,95,.30);
+  background:rgba(14,168,95,.10);
+}
+.pill.warn{
+  color:#7a3e06;
+  border-color:rgba(180,83,9,.30);
+  background:rgba(180,83,9,.10);
+}
+.pill.bad{
+  color:#8b102a;
+  border-color:rgba(225,29,72,.30);
+  background:rgba(225,29,72,.10);
+}
+
+/* ----------------- Lists ----------------- */
 .list{display:grid; gap:10px}
+
 .item{
   border:1px solid var(--line);
-  border-radius:14px;
-  padding:12px;
-  background:rgba(255,255,255,.04);
+  border-radius:16px;
+  padding:14px;
+  background:rgba(15,23,42,.03);
 }
-.item .meta{font-size:12px;color:var(--muted);margin-top:6px}
 
-.q{padding:10px;border:1px solid var(--line);border-radius:14px;background:rgba(255,255,255,.03);margin:10px 0}
-.q .ql{font-weight:700}
-.q .req{color:var(--warn); font-size:12px; margin-left:6px}
+.item .meta{
+  font-size:12px;
+  color:var(--muted);
+  margin-top:6px;
+}
+
+/* ----------------- Questions ----------------- */
+.q{
+  padding:12px;
+  border:1px solid var(--line);
+  border-radius:16px;
+  background:rgba(15,23,42,.02);
+  margin:10px 0;
+}
+
+.q .ql{font-weight:900}
+.q .req{
+  color:var(--warn);
+  font-size:12px;
+  margin-left:6px
+}
+
 .small{font-size:12px;color:var(--muted)}
 
-.photoGrid{display:grid; grid-template-columns:repeat(3,1fr); gap:10px}
-@media (min-width:760px){ .photoGrid{grid-template-columns:repeat(5,1fr)} }
+/* ----------------- Photo grid ----------------- */
+.photoGrid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:10px
+}
+@media (min-width:760px){
+  .photoGrid{grid-template-columns:repeat(5,1fr)}
+}
+
 .ph{
   border:1px solid var(--line);
-  border-radius:14px;
+  border-radius:16px;
   overflow:hidden;
-  background:#0e1526;
+  background:#fff;
   position:relative;
+  box-shadow: 0 6px 14px rgba(15,23,42,.06);
 }
-.ph img{width:100%; height:110px; object-fit:cover; display:block}
+.ph img{
+  width:100%;
+  height:120px;
+  object-fit:cover;
+  display:block
+}
 .ph button{
-  position:absolute; top:6px; right:6px;
-  padding:6px 8px; border-radius:12px;
-  background:rgba(0,0,0,.55); color:var(--txt);
-  border:1px solid rgba(255,255,255,.18);
+  position:absolute;
+  top:6px;
+  right:6px;
+  padding:8px 10px;
+  border-radius:14px;
+  background:rgba(255,255,255,.85);
+  color:var(--txt);
+  border:1px solid rgba(15,23,42,.18);
+  cursor:pointer;
+}
+.ph button:active{transform:translateY(1px)}
+
+/* ----------------- Phone fine-tuning ----------------- */
+@media (max-width: 520px){
+  .app{padding:12px;}
+  .card{padding:16px;}
+  .row{gap:12px;}
+  .pill{padding:8px 12px; font-size:13px;}
+  .photoGrid .ph img{height:130px;}
 }
