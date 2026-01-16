@@ -1,0 +1,10 @@
+{
+  "name": "Merch Visits – Mobile Logger",
+  "short_name": "Mobile Logger",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b0f18",
+  "theme_color": "#0b0f18",
+  "icons": []
+}
