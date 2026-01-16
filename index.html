@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Merch Visits – Mobile Logger</title>
+
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="stylesheet" href="./styles.css" />
+  <meta name="theme-color" content="#0b0f18" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="dot"></div>
+      <div>
+        <div class="title">Mobile Logger</div>
+        <div class="sub">Merch Visits</div>
+      </div>
+    </div>
+    <button id="btnInstall" class="btn ghost" hidden>Instalovat</button>
+  </header>
+
+  <main id="app" class="app"></main>
+
+  <!-- JSZip (lokálně kvůli offline a GitHub Pages) -->
+  <script src="./vendor/jszip.min.js"></script>
+
+  <!-- App -->
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
