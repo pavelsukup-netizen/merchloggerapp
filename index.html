@@ -10,23 +10,41 @@
   <meta name="theme-color" content="#0b0f18" />
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <div class="dot"></div>
-      <div>
-        <div class="title">Mobile Logger</div>
-        <div class="sub">Merch Visits</div>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="sbBrand">
+        <div class="dot"></div>
+        <div>
+          <div class="sbTitle">Mobile Logger</div>
+          <div class="sbSub">Merch Visits</div>
+        </div>
       </div>
-    </div>
-    <button id="btnInstall" class="btn ghost" hidden>Instalovat</button>
-  </header>
 
-  <main id="app" class="app"></main>
+      <div class="sbNav">
+        <button class="sbBtn" data-nav="home">🏠 Home</button>
+        <button class="sbBtn" data-nav="new">➕ Nová návštěva</button>
+      </div>
 
-  <!-- JSZip (lokálně kvůli offline a GitHub Pages) -->
+      <div class="sbFoot">
+        <button id="btnInstall" class="btn ghost" hidden>Instalovat</button>
+        <div class="small">PWA • offline-ready</div>
+      </div>
+    </aside>
+
+    <section class="content">
+      <header class="topbar">
+        <div class="topTitle">Merch Visits</div>
+        <div class="topPills">
+          <span class="pill">Mobile Logger</span>
+        </div>
+      </header>
+
+      <main id="app" class="app"></main>
+    </section>
+  </div>
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-
-  <!-- App -->
   <script type="module" src="./app.js"></script>
 </body>
+
 </html>
