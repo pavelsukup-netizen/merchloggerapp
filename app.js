@@ -2,7 +2,7 @@ import { IDB } from "./idb.js";
 
 const $ = (sel) => document.querySelector(sel);
 
-const APP_VERSION = "1.0.0"; // změň, když chceš "tvrdší" refresh
+const APP_VERSION = "1.0.1";
 const state = {
   route: { name: "home", params: {} },
   pack: null,
@@ -33,6 +33,12 @@ function timeLocal(){
   return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 }
 
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, m => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
+  })[m]);
+}
+
 function toast(msg, kind=""){
   const el = document.createElement("div");
   el.className = "card";
@@ -41,8 +47,10 @@ function toast(msg, kind=""){
   el.style.right="14px";
   el.style.bottom="14px";
   el.style.zIndex="9999";
-  el.style.borderColor = kind==="bad" ? "rgba(255,92,122,.35)" : kind==="ok" ? "rgba(57,217,138,.35)" : "rgba(255,255,255,.10)";
-  el.innerHTML = `<div style="font-weight:750">${escapeHtml(msg)}</div>`;
+  el.style.borderColor = kind==="bad" ? "rgba(225,29,72,.30)"
+    : kind==="ok" ? "rgba(14,168,95,.30)"
+    : "rgba(15,23,42,.16)";
+  el.innerHTML = `<div style="font-weight:850">${escapeHtml(msg)}</div>`;
   document.body.appendChild(el);
   setTimeout(()=>{ el.style.opacity="0"; el.style.transform="translateY(8px)"; el.style.transition="all .25s"; }, 1800);
   setTimeout(()=> el.remove(), 2300);
@@ -53,6 +61,7 @@ function navigate(name, params={}){
   render();
 }
 
+/* ----------------- Load / store ----------------- */
 async function loadAll(){
   state.pack = await IDB.get("pack","current") || null;
   await loadDrafts();
@@ -78,12 +87,6 @@ function buildTemplatesIndex(){
   for (const t of templates){
     if (t?.id && t?.json) state.templatesById.set(t.id, t.json);
   }
-}
-
-function escapeHtml(s){
-  return String(s).replace(/[&<>"']/g, m => ({
-    "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
-  })[m]);
 }
 
 function getPackPill(){
@@ -195,7 +198,7 @@ async function deleteDraft(id){
   navigate("home");
 }
 
-/* ----------------- Checklist ----------------- */
+/* ----------------- Checklist helpers ----------------- */
 function collectQuestions(templateJson){
   const out = [];
   const sections = templateJson?.sections || [];
@@ -205,21 +208,6 @@ function collectQuestions(templateJson){
     }
   }
   return out;
-}
-
-function renderQuestion(draft, templateId, q){
-  const qid = q.id;
-  const required = !!q.required;
-  const val = draft.answers?.[templateId]?.[qid];
-
-  return `
-    <div class="q" data-tid="${escapeHtml(templateId)}" data-qid="${escapeHtml(qid)}" data-qtype="${escapeHtml(q.type)}">
-      <div class="ql">${escapeHtml(q.label || qid)} ${required ? `<span class="req">* povinné</span>`:""}</div>
-      <div class="small">${escapeHtml(q.type)}</div>
-      <div class="hr"></div>
-      ${renderInput(q, val)}
-    </div>
-  `;
 }
 
 function renderInput(q, val){
@@ -290,6 +278,21 @@ function renderInput(q, val){
   `;
 }
 
+function renderQuestion(draft, templateId, q){
+  const qid = q.id;
+  const required = !!q.required;
+  const val = draft.answers?.[templateId]?.[qid];
+
+  return `
+    <div class="q" data-tid="${escapeHtml(templateId)}" data-qid="${escapeHtml(qid)}" data-qtype="${escapeHtml(q.type)}">
+      <div class="ql">${escapeHtml(q.label || qid)} ${required ? `<span class="req">* povinné</span>`:""}</div>
+      <div class="small">${escapeHtml(q.type)}</div>
+      <div class="hr"></div>
+      ${renderInput(q, val)}
+    </div>
+  `;
+}
+
 function validateRequired(draft){
   const missing = [];
   for (const tid of (draft.checklistTemplateIds||[])){
@@ -333,6 +336,19 @@ async function removePhotoFromDraft(draft, name){
   draft.attachments.photos = (draft.attachments.photos||[]).filter(p => p.name !== name);
   await IDB.del("photos", `${draft.id}:${name}`);
   await saveDraft(draft);
+}
+
+async function hydratePhotoThumbs(){
+  const d = state.currentDraft;
+  const nodes = document.querySelectorAll(".ph");
+  for (const node of nodes){
+    const name = node.getAttribute("data-ph");
+    const rec = await IDB.get("photos", `${d.id}:${name}`);
+    const img = node.querySelector("img");
+    if (rec?.blob && img){
+      img.src = URL.createObjectURL(rec.blob);
+    }
+  }
 }
 
 function downloadBlob(blob, filename){
@@ -387,25 +403,12 @@ async function exportDraftZip(draft){
 
   const content = await zip.generateAsync({ type: "blob" });
   const filename = `visit_export_${draft.id}.zip`;
-  const file = new File([content], filename, { type: "application/zip" });
-
-  if (navigator.canShare && navigator.canShare({ files: [file] })){
-    try{
-      await navigator.share({ files: [file], title: "Visit export", text: "Mobile Visit Package" });
-      toast("Sdíleno ✓", "ok");
-      return;
-    } catch {}
-  }
-
   downloadBlob(content, filename);
   toast("Export hotovej ✓", "ok");
 }
 
-/* ----------------- UI screens ----------------- */
+/* ----------------- Screens ----------------- */
 function screenHome(){
-  const pack = state.pack;
-  const drafts = state.drafts;
-
   const packInfo = `
     <div class="card">
       <h2>Stav packu</h2>
@@ -423,8 +426,8 @@ function screenHome(){
     <div class="card">
       <h2>Akce</h2>
       <div class="row">
-        <button class="btn ok" id="btnNewVisit" ${pack ? "" : "disabled"}>Nová návštěva</button>
-        <span class="pill ${pack ? "ok":"bad"}">${pack ? "můžeš tvořit návštěvy" : "nejdřív import pack"}</span>
+        <button class="btn ok" id="btnNewVisit" ${state.pack ? "" : "disabled"}>Nová návštěva</button>
+        <span class="pill ${state.pack ? "ok":"bad"}">${state.pack ? "můžeš tvořit návštěvy" : "nejdřív import pack"}</span>
       </div>
       <p class="small">Drafty se ukládají průběžně (offline friendly).</p>
     </div>
@@ -434,10 +437,10 @@ function screenHome(){
     <div class="card">
       <h2>Rozpracované návštěvy</h2>
       <div class="list">
-        ${drafts.length ? drafts.map(d => `
+        ${state.drafts.length ? state.drafts.map(d => `
           <div class="item">
             <div style="display:flex;gap:10px;align-items:center">
-              <div style="font-weight:750">${escapeHtml(d.storeName || "—")}</div>
+              <div style="font-weight:850">${escapeHtml(d.storeName || "—")}</div>
               <span class="pill">${escapeHtml(d.visitDate||"")}</span>
               <span class="pill">${escapeHtml(d.visitTime||"")}</span>
               <span class="spacer"></span>
@@ -491,7 +494,6 @@ function screenNewVisit(){
 
       <div class="hr"></div>
       <h2>Checklist šablony</h2>
-      <p class="small">Default vyberu ty s <b>onCreateDefault</b>.</p>
 
       <div id="tplList" class="list">
         ${tpls.filter(t=>t.enabled!==false).map(t=>{
@@ -500,7 +502,7 @@ function screenNewVisit(){
             <label class="item" style="display:flex;gap:10px;align-items:center;margin:0">
               <input type="checkbox" value="${escapeHtml(t.id)}" ${checked}/>
               <div>
-                <div style="font-weight:700">${escapeHtml(t.name || t.id)}</div>
+                <div style="font-weight:850">${escapeHtml(t.name || t.id)}</div>
                 <div class="small">id: ${escapeHtml(t.id)}</div>
               </div>
             </label>
@@ -510,7 +512,7 @@ function screenNewVisit(){
 
       <div class="hr"></div>
       <div class="row">
-        <button class="btn ghost" id="btnBackHome">Zpět</button>
+        <button class="btn ghost" data-nav="home">Zpět</button>
         <span class="spacer"></span>
         <button class="btn ok" id="btnStartFill">Začít vyplňovat</button>
       </div>
@@ -536,7 +538,7 @@ function screenFill(){
     for (const row of qs){
       if (row.sectionId !== lastSec){
         lastSec = row.sectionId;
-        html.push(`<div class="hr"></div><div style="font-weight:800">${escapeHtml(row.sectionTitle || row.sectionId)}</div>`);
+        html.push(`<div class="hr"></div><div style="font-weight:900">${escapeHtml(row.sectionTitle || row.sectionId)}</div>`);
       }
       html.push(renderQuestion(d, tid, row.q));
     }
@@ -554,20 +556,13 @@ function screenFill(){
       <h2>${escapeHtml(d.storeName || "Návštěva")}</h2>
       <p>${escapeHtml(d.partnerName||"")} • ${escapeHtml(d.visitDate||"")} ${escapeHtml(d.visitTime||"")}</p>
       <div class="row">
-        <button class="btn ghost" id="btnBackHome">Domů</button>
-        <button class="btn" id="btnToPhotos">Pokračovat na fotky</button>
+        <button class="btn ghost" data-nav="home">Domů</button>
+        <button class="btn" data-nav="photos">Na fotky</button>
         <span class="spacer"></span>
         <span class="pill">autosave: zapnuto</span>
       </div>
     </div>
     ${blocks.join("")}
-    <div class="card">
-      <div class="row">
-        <button class="btn ghost" id="btnBackHome2">Domů</button>
-        <span class="spacer"></span>
-        <button class="btn" id="btnToPhotos2">Na fotky</button>
-      </div>
-    </div>
   `;
 }
 
@@ -588,7 +583,7 @@ function screenPhotos(){
 
       <div class="hr"></div>
 
-      <div class="photoGrid" id="photoGrid">
+      <div class="photoGrid">
         ${photos.map(p=>`
           <div class="ph" data-ph="${escapeHtml(p.name)}">
             <img alt="${escapeHtml(p.name)}" src="" />
@@ -599,9 +594,9 @@ function screenPhotos(){
 
       <div class="hr"></div>
       <div class="row">
-        <button class="btn ghost" id="btnBackFill">Zpět na checklist</button>
+        <button class="btn ghost" data-nav="fill">Zpět</button>
         <span class="spacer"></span>
-        <button class="btn ok" id="btnToExport">Export</button>
+        <button class="btn ok" data-nav="export">Export</button>
       </div>
     </div>
   `;
@@ -624,23 +619,9 @@ function screenExport(){
         <span class="pill">fotky: ${(d.attachments?.photos||[]).length}</span>
       </div>
 
-      ${missing.length ? `
-        <div class="hr"></div>
-        <div class="small">Chybí:</div>
-        <div class="list">
-          ${missing.slice(0,8).map(m=>`
-            <div class="item">
-              <div style="font-weight:750">${escapeHtml(m.label)}</div>
-              <div class="small">template: ${escapeHtml(m.templateId)} • qid: ${escapeHtml(m.qid)}</div>
-            </div>
-          `).join("")}
-          ${missing.length>8 ? `<div class="small">…a další</div>` : ``}
-        </div>
-      `:""}
-
       <div class="hr"></div>
       <div class="row">
-        <button class="btn ghost" id="btnBackPhotos">Zpět</button>
+        <button class="btn ghost" data-nav="photos">Zpět</button>
         <span class="spacer"></span>
         <button class="btn ok" id="btnDoExport">Exportovat visit_export.zip</button>
       </div>
@@ -650,7 +631,7 @@ function screenExport(){
   `;
 }
 
-/* ----------------- Render + events ----------------- */
+/* ----------------- Render ----------------- */
 async function render(){
   if (["fill","photos","export"].includes(state.route.name)){
     await openDraft(state.route.params.id);
@@ -669,164 +650,164 @@ async function render(){
   if (state.route.name === "export") html = screenExport();
 
   root.innerHTML = html;
-  wireEvents();
 
   if (state.route.name === "photos"){
     await hydratePhotoThumbs();
   }
 }
 
-function wireEvents(){
-  // Home
-  const btnImportPack = $("#btnImportPack");
-  if (btnImportPack){
-    btnImportPack.onclick = async () => {
-      const f = $("#filePack")?.files?.[0];
-      if (!f){ toast("Vyber soubor packu.", "bad"); return; }
-      await importPackFromFile(f);
-    };
-  }
-  const btnNewVisit = $("#btnNewVisit");
-  if (btnNewVisit) btnNewVisit.onclick = () => navigate("new");
+/* ----------------- ONE event handler (delegace) ----------------- */
+document.addEventListener("click", async (e) => {
+  const t = e.target;
 
-  document.querySelectorAll("[data-open]").forEach(b=>{
-    b.onclick = () => navigate("fill", { id: b.getAttribute("data-open") });
-  });
-  document.querySelectorAll("[data-del]").forEach(b=>{
-    b.onclick = () => deleteDraft(b.getAttribute("data-del"));
-  });
+  // Sidebar / nav
+  const navBtn = t.closest("[data-nav]");
+  if (navBtn){
+    const dest = navBtn.getAttribute("data-nav");
+    if (dest === "home") return navigate("home");
+    if (dest === "new") return navigate("new");
+    if (!state.currentDraft) return;
 
-  // New visit
-  const partnerSel = $("#partnerSel");
-  if (partnerSel){
-    partnerSel.onchange = () => {
-      const pid = partnerSel.value;
-      const storeSel = $("#storeSel");
-      const stores = (state.pack?.settings?.stores || []).filter(s => s.active!==false && s.partnerId === pid);
-      storeSel.innerHTML = `<option value="">—</option>` + stores.map(s=>`<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join("");
-      storeSel.disabled = !pid;
-    };
+    if (dest === "fill") return navigate("fill", { id: state.currentDraft.id });
+    if (dest === "photos") return navigate("photos", { id: state.currentDraft.id });
+    if (dest === "export") return navigate("export", { id: state.currentDraft.id });
   }
 
-  $("#btnBackHome")?.addEventListener("click", ()=>navigate("home"));
+  // Home actions
+  if (t.id === "btnImportPack"){
+    const f = $("#filePack")?.files?.[0];
+    if (!f) return toast("Vyber soubor packu.", "bad");
+    return importPackFromFile(f);
+  }
+  if (t.id === "btnNewVisit"){
+    return navigate("new");
+  }
 
-  $("#btnStartFill")?.addEventListener("click", async ()=>{
+  // Draft open/delete
+  const openBtn = t.closest("[data-open]");
+  if (openBtn){
+    return navigate("fill", { id: openBtn.getAttribute("data-open") });
+  }
+  const delBtn = t.closest("[data-del]");
+  if (delBtn){
+    return deleteDraft(delBtn.getAttribute("data-del"));
+  }
+
+  // New visit start
+  if (t.id === "btnStartFill"){
     const partnerId = $("#partnerSel")?.value || "";
     const storeId = $("#storeSel")?.value || "";
-    if (!partnerId){ toast("Vyber partnera.", "bad"); return; }
-    if (!storeId){ toast("Vyber prodejnu.", "bad"); return; }
+    if (!partnerId) return toast("Vyber partnera.", "bad");
+    if (!storeId) return toast("Vyber prodejnu.", "bad");
 
     const visitDate = $("#visitDate")?.value || todayLocal();
     const visitTime = $("#visitTime")?.value || timeLocal();
     const note = $("#note")?.value || "";
-
     const tplIds = [...document.querySelectorAll("#tplList input[type=checkbox]:checked")].map(i=>i.value);
-    if (!tplIds.length){ toast("Vyber aspoň jednu šablonu.", "bad"); return; }
+    if (!tplIds.length) return toast("Vyber aspoň jednu šablonu.", "bad");
 
-    await createNewDraft({ partnerId, storeId, visitDate, visitTime, note, templateIds: tplIds });
-  });
+    return createNewDraft({ partnerId, storeId, visitDate, visitTime, note, templateIds: tplIds });
+  }
 
-  // Fill nav
-  $("#btnToPhotos")?.addEventListener("click", ()=>navigate("photos", { id: state.currentDraft.id }));
-  $("#btnToPhotos2")?.addEventListener("click", ()=>navigate("photos", { id: state.currentDraft.id }));
-  $("#btnBackHome2")?.addEventListener("click", ()=>navigate("home"));
+  // Partner change -> load stores
+  if (t.id === "partnerSel"){
+    // (click event sem často nedojde), řešíme níž "change"
+  }
 
-  // question handlers (delegace)
-  document.querySelectorAll(".q").forEach(qel=>{
+  // Boolean answer buttons
+  const setBtn = t.closest("button[data-set]");
+  if (setBtn){
+    const qel = setBtn.closest(".q");
+    if (!qel || !state.currentDraft) return;
     const tid = qel.getAttribute("data-tid");
     const qid = qel.getAttribute("data-qid");
-    const qtype = qel.getAttribute("data-qtype");
+    const v = setBtn.getAttribute("data-set") === "true";
+    const d = state.currentDraft;
+    d.answers = d.answers || {};
+    d.answers[tid] = d.answers[tid] || {};
+    d.answers[tid][qid] = v;
+    await saveDraft(d);
+    return render();
+  }
 
-    qel.querySelectorAll("button[data-set]").forEach(btn=>{
-      btn.onclick = async () => {
-        const v = btn.getAttribute("data-set") === "true";
-        const d = state.currentDraft;
-        d.answers = d.answers || {};
-        d.answers[tid] = d.answers[tid] || {};
-        d.answers[tid][qid] = v;
-        await saveDraft(d);
-        render();
-      };
-    });
+  // Multi remove photo
+  const rm = t.closest("[data-rm]");
+  if (rm){
+    const name = rm.getAttribute("data-rm");
+    await removePhotoFromDraft(state.currentDraft, name);
+    return navigate("photos", { id: state.currentDraft.id });
+  }
 
-    if (qtype === "multi"){
-      qel.querySelectorAll("input[type=checkbox][data-multi]").forEach(ch=>{
-        ch.onchange = async () => {
-          const d = state.currentDraft;
-          d.answers = d.answers || {};
-          d.answers[tid] = d.answers[tid] || {};
-          const arr = new Set(Array.isArray(d.answers[tid][qid]) ? d.answers[tid][qid] : []);
-          if (ch.checked) arr.add(ch.value); else arr.delete(ch.value);
-          d.answers[tid][qid] = [...arr];
-          await saveDraft(d);
-        };
-      });
-      return;
-    }
-
-    const inp = qel.querySelector("input.inp, select, textarea");
-    if (!inp) return;
-
-    const handler = async () => {
-      const d = state.currentDraft;
-      d.answers = d.answers || {};
-      d.answers[tid] = d.answers[tid] || {};
-      let v = inp.value;
-
-      if (qtype === "number" || qtype === "scale"){
-        v = (v === "") ? null : Number(v);
-        if (Number.isNaN(v)) v = null;
-      } else if (qtype === "single"){
-        v = (v === "") ? null : String(v);
-      } else {
-        v = String(v);
-      }
-
-      d.answers[tid][qid] = v;
-      await saveDraft(d);
-    };
-
-    inp.addEventListener("input", handler);
-    inp.addEventListener("change", handler);
-  });
-
-  // Photos
-  $("#btnBackFill")?.addEventListener("click", ()=>navigate("fill", { id: state.currentDraft.id }));
-
-  $("#btnAddPhotos")?.addEventListener("click", async ()=>{
+  // Add photos
+  if (t.id === "btnAddPhotos"){
     const files = $("#filePhotos")?.files;
-    if (!files || !files.length){ toast("Vyber fotky.", "bad"); return; }
+    if (!files || !files.length) return toast("Vyber fotky.", "bad");
     await addPhotosToDraft(state.currentDraft, [...files]);
-    navigate("photos", { id: state.currentDraft.id });
-  });
-
-  document.querySelectorAll("[data-rm]").forEach(b=>{
-    b.onclick = async () => {
-      const name = b.getAttribute("data-rm");
-      await removePhotoFromDraft(state.currentDraft, name);
-      navigate("photos", { id: state.currentDraft.id });
-    };
-  });
-
-  $("#btnToExport")?.addEventListener("click", ()=>navigate("export", { id: state.currentDraft.id }));
+    return navigate("photos", { id: state.currentDraft.id });
+  }
 
   // Export
-  $("#btnBackPhotos")?.addEventListener("click", ()=>navigate("photos", { id: state.currentDraft.id }));
-  $("#btnDoExport")?.addEventListener("click", async ()=>{ await exportDraftZip(state.currentDraft); });
-}
-
-async function hydratePhotoThumbs(){
-  const d = state.currentDraft;
-  const nodes = document.querySelectorAll(".ph");
-  for (const node of nodes){
-    const name = node.getAttribute("data-ph");
-    const rec = await IDB.get("photos", `${d.id}:${name}`);
-    const img = node.querySelector("img");
-    if (rec?.blob && img){
-      img.src = URL.createObjectURL(rec.blob);
-    }
+  if (t.id === "btnDoExport"){
+    return exportDraftZip(state.currentDraft);
   }
-}
+});
+
+// Change/input handler (delegace)
+document.addEventListener("change", async (e) => {
+  const t = e.target;
+
+  // Partner -> stores
+  if (t.id === "partnerSel"){
+    const pid = t.value;
+    const storeSel = $("#storeSel");
+    const stores = (state.pack?.settings?.stores || []).filter(s => s.active!==false && s.partnerId === pid);
+    storeSel.innerHTML = `<option value="">—</option>` + stores.map(s=>`<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join("");
+    storeSel.disabled = !pid;
+    return;
+  }
+
+  // Multi checkboxes
+  if (t.matches("input[type=checkbox][data-multi]")){
+    const qel = t.closest(".q");
+    if (!qel || !state.currentDraft) return;
+    const tid = qel.getAttribute("data-tid");
+    const qid = qel.getAttribute("data-qid");
+    const d = state.currentDraft;
+    d.answers = d.answers || {};
+    d.answers[tid] = d.answers[tid] || {};
+    const arr = new Set(Array.isArray(d.answers[tid][qid]) ? d.answers[tid][qid] : []);
+    if (t.checked) arr.add(t.value); else arr.delete(t.value);
+    d.answers[tid][qid] = [...arr];
+    await saveDraft(d);
+    return;
+  }
+
+  // Single/select/number/scale/text
+  const qel = t.closest(".q");
+  if (!qel || !state.currentDraft) return;
+  if (!t.matches("input.inp, select, textarea")) return;
+
+  const tid = qel.getAttribute("data-tid");
+  const qid = qel.getAttribute("data-qid");
+  const qtype = qel.getAttribute("data-qtype");
+
+  const d = state.currentDraft;
+  d.answers = d.answers || {};
+  d.answers[tid] = d.answers[tid] || {};
+
+  let v = t.value;
+  if (qtype === "number" || qtype === "scale"){
+    v = (v === "") ? null : Number(v);
+    if (Number.isNaN(v)) v = null;
+  } else if (qtype === "single"){
+    v = (v === "") ? null : String(v);
+  } else {
+    v = String(v);
+  }
+
+  d.answers[tid][qid] = v;
+  await saveDraft(d);
+});
 
 /* ----------------- PWA install + SW ----------------- */
 function setupInstall(){
@@ -845,7 +826,6 @@ function setupInstall(){
     $("#btnInstall").hidden = true;
   });
 
-  // GitHub Pages friendly: registrace jako relativní URL (funguje i v /repo/)
   if ("serviceWorker" in navigator){
     navigator.serviceWorker.register("./sw.js").catch(()=>{});
   }
@@ -853,5 +833,5 @@ function setupInstall(){
 
 /* ----------------- Boot ----------------- */
 await loadAll();
-render();
+await render();
 setupInstall();
