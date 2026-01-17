@@ -1,56 +1,87 @@
-const DB_NAME = "mv_mobile_logger";
-const DB_VER = 1;
+// idb.js — jednoduchý wrapper nad IndexedDB (v1 kontrakt)
+const DB_NAME = "mv_mobile_logger_db";
+const DB_VER = 2;
 
-function openDB() {
+const STORES = {
+  meta: "meta",     // key -> any (deviceId, lastExportDate, ...)
+  pack: "pack",     // key="current" -> jobpack json
+  drafts: "drafts", // key=visitId -> draft result (rozpracovaný / hotový)
+  photos: "photos", // key=photoId -> { blob, mime, takenAt, visitId }
+};
+
+function openDB(){
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VER);
+
     req.onupgradeneeded = () => {
       const db = req.result;
-      if (!db.objectStoreNames.contains("pack")) db.createObjectStore("pack");
-      if (!db.objectStoreNames.contains("drafts")) db.createObjectStore("drafts");
-      if (!db.objectStoreNames.contains("photos")) db.createObjectStore("photos");
+
+      for (const k of Object.values(STORES)){
+        if (!db.objectStoreNames.contains(k)) db.createObjectStore(k);
+      }
     };
+
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
 }
 
-async function tx(store, mode, fn) {
+async function tx(storeName, mode, fn){
   const db = await openDB();
   return new Promise((resolve, reject) => {
-    const t = db.transaction(store, mode);
-    const s = t.objectStore(store);
+    const t = db.transaction(storeName, mode);
+    const s = t.objectStore(storeName);
     const out = fn(s);
-    t.oncomplete = () => resolve(out);
-    t.onerror = () => reject(t.error);
+    t.oncomplete = () => { db.close(); resolve(out); };
+    t.onerror = () => { db.close(); reject(t.error); };
+    t.onabort = () => { db.close(); reject(t.error); };
   });
 }
 
 export const IDB = {
-  async get(store, key) {
+  STORES,
+
+  async get(store, key){
     const db = await openDB();
     return new Promise((resolve, reject) => {
       const t = db.transaction(store, "readonly");
       const s = t.objectStore(store);
-      const r = s.get(key);
-      r.onsuccess = () => resolve(r.result);
-      r.onerror = () => reject(r.error);
+      const req = s.get(key);
+      req.onsuccess = () => resolve(req.result ?? null);
+      req.onerror = () => reject(req.error);
+      t.oncomplete = () => db.close();
     });
   },
-  async set(store, key, val) {
-    return tx(store, "readwrite", (s) => s.put(val, key));
+
+  async set(store, key, value){
+    return tx(store, "readwrite", (s) => s.put(value, key));
   },
-  async del(store, key) {
+
+  async del(store, key){
     return tx(store, "readwrite", (s) => s.delete(key));
   },
-  async keys(store) {
+
+  async keys(store){
     const db = await openDB();
     return new Promise((resolve, reject) => {
       const t = db.transaction(store, "readonly");
       const s = t.objectStore(store);
-      const r = s.getAllKeys();
-      r.onsuccess = () => resolve(r.result || []);
-      r.onerror = () => reject(r.error);
+      const req = s.getAllKeys();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+      t.oncomplete = () => db.close();
     });
   },
+
+  async all(store){
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const t = db.transaction(store, "readonly");
+      const s = t.objectStore(store);
+      const req = s.getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+      t.oncomplete = () => db.close();
+    });
+  }
 };
