@@ -2,43 +2,41 @@ import { IDB } from "./idb.js";
 
 const $ = (sel) => document.querySelector(sel);
 
-const APP_VERSION = "1.0.1";
+const APP_VERSION = "jobpack-v1.0";
+const JOBPACK_SCHEMA = "merch.jobpack";
+const RESULTS_SCHEMA = "merch.results";
+const SCHEMA_VERSION = 1;
+
 const state = {
   route: { name: "home", params: {} },
   pack: null,
-  drafts: [],
-  currentDraft: null,
-  templatesById: new Map(),
-  deferredPrompt: null,
+  draftsByVisitId: new Map(),
+  activeDraft: null,
+  deviceId: null,
+  uiDate: null
 };
 
-function nowISO() { return new Date().toISOString(); }
+/* ---------------- utils ---------------- */
+function nowISO(){ return new Date().toISOString(); }
 function pad2(n){ return String(n).padStart(2,"0"); }
-function yyyyMMdd(d=new Date()){
-  return `${d.getFullYear()}${pad2(d.getMonth()+1)}${pad2(d.getDate())}`;
-}
-function rand8(){
-  const a = crypto.getRandomValues(new Uint8Array(4));
-  return [...a].map(x=>x.toString(16).padStart(2,"0")).join("");
-}
-function mobileVisitId(){
-  return `m_${yyyyMMdd()}_${rand8()}`;
-}
 function todayLocal(){
-  const d=new Date();
+  const d = new Date();
   return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;
 }
-function timeLocal(){
-  const d=new Date();
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+function safeUUID(){
+  if (crypto?.randomUUID) return crypto.randomUUID();
+  // fallback (ne dokonalý, ale ok pro offline id)
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+    const r = (Math.random()*16)|0;
+    const v = c === "x" ? r : (r&0x3)|0x8;
+    return v.toString(16);
+  });
 }
-
 function escapeHtml(s){
-  return String(s).replace(/[&<>"']/g, m => ({
+  return String(s ?? "").replace(/[&<>"']/g, m => ({
     "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"
   })[m]);
 }
-
 function toast(msg, kind=""){
   const el = document.createElement("div");
   el.className = "card";
@@ -49,789 +47,467 @@ function toast(msg, kind=""){
   el.style.zIndex="9999";
   el.style.borderColor = kind==="bad" ? "rgba(225,29,72,.30)"
     : kind==="ok" ? "rgba(14,168,95,.30)"
+    : kind==="warn" ? "rgba(180,83,9,.30)"
     : "rgba(15,23,42,.16)";
-  el.innerHTML = `<div style="font-weight:850">${escapeHtml(msg)}</div>`;
+  el.innerHTML = `<div style="font-weight:900">${escapeHtml(msg)}</div>`;
   document.body.appendChild(el);
-  setTimeout(()=>{ el.style.opacity="0"; el.style.transform="translateY(8px)"; el.style.transition="all .25s"; }, 1800);
-  setTimeout(()=> el.remove(), 2300);
+  setTimeout(()=>{ el.style.opacity="0"; el.style.transform="translateY(8px)"; el.style.transition="all .25s"; }, 1700);
+  setTimeout(()=> el.remove(), 2200);
 }
-
 function navigate(name, params={}){
   state.route = { name, params };
   render();
 }
+function ymdToFile(ymd){ return ymd; } // už je YYYY-MM-DD
+function byTime(a,b){
+  const ta = a.startTime || "99:99";
+  const tb = b.startTime || "99:99";
+  return ta.localeCompare(tb);
+}
 
-/* ----------------- Load / store ----------------- */
-async function loadAll(){
-  state.pack = await IDB.get("pack","current") || null;
-  await loadDrafts();
-  buildTemplatesIndex();
+/* ---------------- jobpack validation ---------------- */
+function validateJobPackV1(pack){
+  const errors = [];
+
+  if (!pack || pack.schema !== JOBPACK_SCHEMA || pack.schemaVersion !== 1){
+    errors.push(`schema/schemaVersion nesedí (čekám ${JOBPACK_SCHEMA} v1).`);
+    return errors;
+  }
+  if (!pack.packId) errors.push("Chybí packId");
+  if (!pack.createdAt) errors.push("Chybí createdAt");
+  if (!pack.validFrom || !pack.validTo) errors.push("Chybí validFrom/validTo");
+  if (!pack.merch?.id) errors.push("Chybí merch.id");
+  if (!Array.isArray(pack.stores) || !pack.stores.length) errors.push("Chybí stores[]");
+  if (!Array.isArray(pack.templates) || !pack.templates.length) errors.push("Chybí templates[]");
+  if (!Array.isArray(pack.visits) || !pack.visits.length) errors.push("Chybí visits[]");
+
+  const storeSet = new Set((pack.stores||[]).map(s => s.sapId));
+  for (const v of (pack.visits||[])){
+    if (!v.visitId) errors.push("Visit bez visitId");
+    if (!v.sapId) errors.push(`Visit ${v.visitId||"(no id)"} bez sapId`);
+    if (!v.templateId) errors.push(`Visit ${v.visitId||"(no id)"} bez templateId`);
+    if (!v.date) errors.push(`Visit ${v.visitId||"(no id)"} bez date`);
+    if (v.sapId && !storeSet.has(v.sapId)) errors.push(`Visit ${v.visitId} odkazuje na neznámý store sapId: ${v.sapId}`);
+  }
+
+  const tplSet = new Set((pack.templates||[]).map(t => t.templateId));
+  for (const v of (pack.visits||[])){
+    if (v.templateId && !tplSet.has(v.templateId)) errors.push(`Visit ${v.visitId} odkazuje na neznámý templateId: ${v.templateId}`);
+  }
+
+  for (const t of (pack.templates||[])){
+    if (!t.templateId) errors.push("Template bez templateId");
+    const keys = new Set();
+    const dups = new Set();
+    for (const b of (t.blocks||[])){
+      for (const q of (b.questions||[])){
+        if (!q.key) errors.push(`Template ${t.templateId}: otázka bez key`);
+        if (q.key){
+          if (keys.has(q.key)) dups.add(q.key);
+          keys.add(q.key);
+        }
+        if (!q.type) errors.push(`Template ${t.templateId}: otázka ${q.key||q.id} bez type`);
+        if (q.type === "select"){
+          if (!Array.isArray(q.options) || !q.options.length) errors.push(`Template ${t.templateId}: select ${q.key} bez options`);
+        }
+        if (q.type === "furniture_trigger"){
+          const tr = q.trigger;
+          if (!tr || tr.kind !== "furniture") errors.push(`Template ${t.templateId}: furniture_trigger ${q.key} chybí trigger.kind="furniture"`);
+          else{
+            if (!Array.isArray(tr.gateOptions) || tr.gateOptions.length !== 2) errors.push(`Template ${t.templateId}: furniture_trigger ${q.key} gateOptions musí mít 2 hodnoty`);
+            if (!tr.whenValue) errors.push(`Template ${t.templateId}: furniture_trigger ${q.key} chybí whenValue`);
+            const f = tr.form || {};
+            if (typeof f.photosMin !== "number" || typeof f.photosMax !== "number") errors.push(`Template ${t.templateId}: furniture_trigger ${q.key} chybí photosMin/photosMax`);
+          }
+        }
+      }
+    }
+    if (dups.size) errors.push(`Template ${t.templateId}: duplicitní question.key: ${[...dups].join(", ")}`);
+  }
+
+  return errors;
+}
+
+/* ---------------- persistence ---------------- */
+async function loadDeviceId(){
+  let did = await IDB.get(IDB.STORES.meta, "deviceId");
+  if (!did){
+    did = `DEV-${safeUUID()}`;
+    await IDB.set(IDB.STORES.meta, "deviceId", did);
+  }
+  state.deviceId = did;
+}
+
+async function loadPack(){
+  state.pack = await IDB.get(IDB.STORES.pack, "current");
 }
 
 async function loadDrafts(){
-  const keys = await IDB.keys("drafts");
-  const drafts = [];
+  const keys = await IDB.keys(IDB.STORES.drafts);
+  const map = new Map();
   for (const k of keys){
-    const d = await IDB.get("drafts", k);
-    if (d) drafts.push(d);
+    const d = await IDB.get(IDB.STORES.drafts, k);
+    if (d) map.set(k, d);
   }
-  drafts.sort((a,b)=> (b.updatedAt||"").localeCompare(a.updatedAt||""));
-  state.drafts = drafts;
+  state.draftsByVisitId = map;
 }
 
-function buildTemplatesIndex(){
-  state.templatesById = new Map();
-  const pack = state.pack;
-  if (!pack) return;
-  const templates = pack.templates || [];
-  for (const t of templates){
-    if (t?.id && t?.json) state.templatesById.set(t.id, t.json);
-  }
+function getStoreBySap(sapId){
+  return (state.pack?.stores||[]).find(s => s.sapId === sapId) || null;
+}
+function getTemplateById(tid){
+  return (state.pack?.templates||[]).find(t => t.templateId === tid) || null;
+}
+function packPills(){
+  if (!state.pack) return `<span class="pill bad">Pack: nenahrán</span>`;
+  return `
+    <span class="pill ok">Pack ✓</span>
+    <span class="pill">packId: ${escapeHtml(state.pack.packId)}</span>
+    <span class="pill">merch: ${escapeHtml(state.pack.merch?.id)}</span>
+    <span class="pill">app: ${escapeHtml(APP_VERSION)}</span>
+  `;
 }
 
-function getPackPill(){
-  if (!state.pack) return `<span class="pill bad">Pack nahrán: ne</span>`;
-  const gen = state.pack.generatedAt ? new Date(state.pack.generatedAt).toLocaleString() : "—";
-  return `<span class="pill ok">Pack nahrán ✓</span>
-          <span class="pill">packId: ${escapeHtml(state.pack.packId||"—")}</span>
-          <span class="pill">v${escapeHtml(String(state.pack.schemaVersion||"1"))}</span>
-          <span class="pill">generated: ${escapeHtml(gen)}</span>
-          <span class="pill">app: v${escapeHtml(APP_VERSION)}</span>`;
+/* ---------------- answers + photos ---------------- */
+async function addPhotos(files, visitId){
+  const photoIds = [];
+  for (const f of files){
+    const photoId = safeUUID();
+    const mime = f.type || "image/jpeg";
+    await IDB.set(IDB.STORES.photos, photoId, { blob: f, mime, takenAt: nowISO(), visitId });
+    photoIds.push(photoId);
+  }
+  return photoIds;
 }
 
-function ensurePackOrBlock(){
-  if (state.pack) return true;
-  toast("Nejdřív importuj Mobile Pack 🙂", "bad");
-  return false;
+async function getPhoto(photoId){
+  return await IDB.get(IDB.STORES.photos, photoId);
 }
 
-/* ----------------- Pack import ----------------- */
-async function importPackFromFile(file){
-  const text = await file.text();
-  let json;
-  try{ json = JSON.parse(text); } catch {
-    toast("Tohle nevypadá jako JSON 😅", "bad"); return;
-  }
-  if (json.schema !== "mv_mobile_pack" || !json.packId || !json.settings){
-    toast("Pack nemá očekávaný tvar (schema/packId/settings).", "bad"); return;
-  }
-  await IDB.set("pack","current", json);
-  state.pack = json;
-  buildTemplatesIndex();
-  toast("Pack importován ✓", "ok");
-  navigate("home");
-}
+function ensureDraft(visit){
+  const existing = state.draftsByVisitId.get(visit.visitId);
+  if (existing) return existing;
 
-/* ----------------- Drafts ----------------- */
-async function createNewDraft(form){
-  const pack = state.pack;
-  const settings = pack.settings || {};
-  const partners = settings.partners || [];
-  const stores = settings.stores || [];
+  const store = getStoreBySap(visit.sapId);
+  const tpl = getTemplateById(visit.templateId);
 
-  const partner = partners.find(p => p.id === form.partnerId) || null;
-  const store = stores.find(s => s.id === form.storeId) || null;
-
-  const selectedTemplateIds = form.templateIds || [];
-  const templateVersions = {};
-  for (const tid of selectedTemplateIds){
-    const tmeta = (settings.checklistTemplates||[]).find(t=>t.id===tid);
-    const tj = state.templatesById.get(tid);
-    templateVersions[tid] = tj?.version ?? tmeta?.version ?? 1;
-  }
-
-  const id = mobileVisitId();
   const draft = {
-    _kind: "draft",
-    version: 1,
-    id,
-    createdAt: nowISO(),
-    updatedAt: nowISO(),
-    partnerId: form.partnerId,
-    partnerName: partner?.name || "",
-    storeId: form.storeId,
+    schemaVersion: 1,
+    visitId: visit.visitId,
+    sapId: visit.sapId,
     storeName: store?.name || "",
-    visitDate: form.visitDate,
-    visitTime: form.visitTime,
-    note: form.note || "",
-    checklistTemplateIds: selectedTemplateIds,
-    templateVersions,
-    packContext: {
-      packId: pack.packId,
-      checksum: pack.checksum || "",
-      settingsVersion: pack.settings?.version ?? 1,
-    },
+    retailerId: store?.retailerId || "",
+    date: visit.date,
+    templateId: visit.templateId,
+    templateVersion: tpl?.version ?? 1,
+    startedAt: nowISO(),
+    submittedAt: null,
+    status: "open", // open|done|cancelled
+    cancelReason: "",
     answers: {},
-    attachments: { photos: [] },
-    status: "open",
+    furnitureObservations: [] // array
   };
 
-  await IDB.set("drafts", id, draft);
-  await loadDrafts();
-  toast("Draft vytvořen ✓", "ok");
-  navigate("fill", { id });
+  state.draftsByVisitId.set(visit.visitId, draft);
+  return draft;
 }
 
-async function openDraft(id){
-  const d = await IDB.get("drafts", id);
-  if (!d){ toast("Draft nenalezen.", "bad"); navigate("home"); return; }
-  state.currentDraft = d;
+async function saveDraft(draft){
+  await IDB.set(IDB.STORES.drafts, draft.visitId, draft);
+  state.draftsByVisitId.set(draft.visitId, draft);
 }
 
-async function saveDraft(d){
-  d.updatedAt = nowISO();
-  await IDB.set("drafts", d.id, d);
-  state.currentDraft = d;
-  await loadDrafts();
+/* ---------------- rendering helpers ---------------- */
+function screenHome(){
+  const d = state.uiDate || todayLocal();
+  const packCard = `
+    <div class="card">
+      <h2>Job Pack</h2>
+      <div class="row">${packPills()}</div>
+      <div class="hr"></div>
+      <div class="row">
+        <input id="filePack" class="inp" type="file" accept="application/json" />
+        <button class="btn" id="btnImportPack">Import pack</button>
+      </div>
+      <div class="hr"></div>
+      <div class="grid two">
+        <div>
+          <label>Den</label>
+          <input id="uiDate" class="inp" type="date" value="${escapeHtml(d)}" />
+        </div>
+        <div>
+          <label>Export</label>
+          <button class="btn ok" id="btnExportDay" ${state.pack ? "" : "disabled"}>Exportovat denní ZIP</button>
+        </div>
+      </div>
+      <p class="small">Mobil neplánuje. Jen importuje pack, vyplní visits a vyexportuje výsledky.</p>
+    </div>
+  `;
+
+  const visits = (state.pack?.visits || [])
+    .filter(v => v.date === d && v.status !== "cancelled")
+    .slice()
+    .sort(byTime);
+
+  const visitList = `
+    <div class="card">
+      <h2>Návštěvy (${escapeHtml(d)})</h2>
+      <div class="list">
+        ${state.pack ? (visits.length ? visits.map(v => {
+          const store = getStoreBySap(v.sapId);
+          const tpl = getTemplateById(v.templateId);
+          const dr = state.draftsByVisitId.get(v.visitId);
+          const status = dr?.status || "planned";
+          const pillClass = status==="done" ? "ok" : status==="cancelled" ? "bad" : "warn";
+          const label = status==="done" ? "done" : status==="cancelled" ? "cancelled" : (dr ? "open" : "planned");
+          return `
+            <div class="item">
+              <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                <div style="font-weight:900">${escapeHtml(store?.name || v.sapId)}</div>
+                <span class="pill">${escapeHtml(v.startTime || "—")}</span>
+                <span class="pill">${escapeHtml(tpl?.name || v.templateId)}</span>
+                <span class="pill ${pillClass}">${escapeHtml(label)}</span>
+                <span class="spacer"></span>
+                <button class="btn" data-open="${escapeHtml(v.visitId)}">${dr ? "Pokračovat" : "Začít"}</button>
+                <button class="btn ghost" data-cancel="${escapeHtml(v.visitId)}">Zrušit</button>
+              </div>
+              <div class="meta">visitId: ${escapeHtml(v.visitId)}</div>
+            </div>
+          `;
+        }).join("") : `<p class="small">Na tenhle den nejsou v packu žádný visits.</p>`)
+        : `<p class="small">Nejdřív importuj job pack.</p>`}
+      </div>
+    </div>
+  `;
+
+  return `${packCard}${visitList}`;
 }
 
-async function deleteDraft(id){
-  const draft = await IDB.get("drafts", id);
-  if (draft?.attachments?.photos?.length){
-    for (const p of draft.attachments.photos){
-      await IDB.del("photos", `${id}:${p.name}`);
-    }
-  }
-  await IDB.del("drafts", id);
-  await loadDrafts();
-  toast("Smazáno.", "ok");
-  navigate("home");
-}
-
-/* ----------------- Checklist helpers ----------------- */
-function collectQuestions(templateJson){
+function collectQuestions(tpl){
   const out = [];
-  const sections = templateJson?.sections || [];
-  for (const sec of sections){
-    for (const q of (sec.questions||[])){
-      out.push({ sectionId: sec.id, sectionTitle: sec.title, q });
+  for (const b of (tpl.blocks||[])){
+    for (const q of (b.questions||[])){
+      out.push({ blockId: b.id, blockTitle: b.title, q });
     }
   }
   return out;
 }
 
-function renderInput(q, val){
-  const t = q.type;
-  if (t === "boolean"){
+function renderQuestion(draft, q){
+  const key = q.key;
+  const val = draft.answers?.[key];
+
+  const req = q.required ? `<span class="req">*</span>` : "";
+  const help = q.help ? `<div class="small">${escapeHtml(q.help)}</div>` : "";
+
+  if (q.type === "checkbox"){
     const v = (val === true) ? "true" : (val === false ? "false" : "");
     return `
-      <div class="row">
-        <button class="btn ok" data-set="true" ${v==="true"?"disabled":""}>Ano</button>
-        <button class="btn bad" data-set="false" ${v==="false"?"disabled":""}>Ne</button>
-        <span class="pill">${v===""?"—":(v==="true"?"Ano":"Ne")}</span>
+      <div class="q" data-qkey="${escapeHtml(key)}" data-qtype="checkbox">
+        <div class="ql">${escapeHtml(q.label)} ${req}</div>
+        ${help}
+        <div class="hr"></div>
+        <div class="row">
+          <button class="btn ok" data-setbool="true" ${v==="true"?"disabled":""}>Ano</button>
+          <button class="btn bad" data-setbool="false" ${v==="false"?"disabled":""}>Ne</button>
+          <span class="pill">${v===""?"—":(v==="true"?"Ano":"Ne")}</span>
+        </div>
       </div>
     `;
   }
-  if (t === "scale"){
-    const min = q.scale?.min ?? 1;
-    const max = q.scale?.max ?? 5;
-    const v = (typeof val === "number") ? val : "";
+
+  if (q.type === "text"){
     return `
-      <label>Hodnota (${min}–${max})</label>
-      <input class="inp" type="number" min="${min}" max="${max}" step="1" value="${escapeHtml(v)}" />
+      <div class="q" data-qkey="${escapeHtml(key)}" data-qtype="text">
+        <div class="ql">${escapeHtml(q.label)} ${req}</div>
+        ${help}
+        <div class="hr"></div>
+        <textarea>${escapeHtml(typeof val === "string" ? val : "")}</textarea>
+      </div>
     `;
   }
-  if (t === "single"){
+
+  if (q.type === "number"){
+    return `
+      <div class="q" data-qkey="${escapeHtml(key)}" data-qtype="number">
+        <div class="ql">${escapeHtml(q.label)} ${req}</div>
+        ${help}
+        <div class="hr"></div>
+        <input class="inp" type="number" value="${escapeHtml((typeof val === "number") ? String(val) : "")}" />
+      </div>
+    `;
+  }
+
+  if (q.type === "select"){
     const opts = q.options || [];
     const v = (typeof val === "string") ? val : "";
     return `
-      <label>Vyber jednu možnost</label>
-      <select>
-        <option value="">—</option>
-        ${opts.map(o => {
-          const ov = String(o.value ?? o);
-          const ol = String(o.label ?? o.value ?? o);
-          return `<option value="${escapeHtml(ov)}" ${ov===v?"selected":""}>${escapeHtml(ol)}</option>`;
-        }).join("")}
-      </select>
-    `;
-  }
-  if (t === "multi"){
-    const opts = q.options || [];
-    const arr = Array.isArray(val) ? val : [];
-    return `
-      <div class="list">
-        ${opts.map(o=>{
-          const v = String(o.value ?? o);
-          const checked = arr.includes(v) ? "checked" : "";
-          return `
-            <label class="item" style="display:flex;gap:10px;align-items:center;margin:0">
-              <input type="checkbox" data-multi="1" value="${escapeHtml(v)}" ${checked}/>
-              <div>${escapeHtml(o.label ?? v)}</div>
-            </label>
-          `;
-        }).join("")}
+      <div class="q" data-qkey="${escapeHtml(key)}" data-qtype="select">
+        <div class="ql">${escapeHtml(q.label)} ${req}</div>
+        ${help}
+        <div class="hr"></div>
+        <select>
+          <option value="">—</option>
+          ${opts.map(o => `<option value="${escapeHtml(o)}" ${o===v?"selected":""}>${escapeHtml(o)}</option>`).join("")}
+        </select>
       </div>
     `;
   }
-  if (t === "number"){
-    const v = (typeof val === "number") ? val : "";
+
+  if (q.type === "photo"){
+    const ids = (val && typeof val === "object" && Array.isArray(val.photoIds)) ? val.photoIds : [];
     return `
-      <label>Číslo</label>
-      <input class="inp" type="number" value="${escapeHtml(v)}" />
+      <div class="q" data-qkey="${escapeHtml(key)}" data-qtype="photo">
+        <div class="ql">${escapeHtml(q.label)} ${req}</div>
+        ${help}
+        <div class="hr"></div>
+        <div class="row">
+          <input class="inp" type="file" accept="image/*" capture="environment" multiple data-phinp="${escapeHtml(key)}"/>
+          <button class="btn" data-phadd="${escapeHtml(key)}">Přidat fotky</button>
+          <span class="pill">fotky: ${ids.length}</span>
+        </div>
+        <div class="photoGrid">
+          ${ids.map(pid => `
+            <div class="ph" data-phid="${escapeHtml(pid)}" data-qkey="${escapeHtml(key)}">
+              <img alt="${escapeHtml(pid)}" src="" />
+              <button data-phrm="${escapeHtml(pid)}" data-qkey="${escapeHtml(key)}">✕</button>
+            </div>
+          `).join("")}
+        </div>
+      </div>
     `;
   }
-  const v = (typeof val === "string") ? val : "";
-  return `
-    <label>Text</label>
-    <textarea>${escapeHtml(v)}</textarea>
-  `;
-}
 
-function renderQuestion(draft, templateId, q){
-  const qid = q.id;
-  const required = !!q.required;
-  const val = draft.answers?.[templateId]?.[qid];
+  if (q.type === "furniture_trigger"){
+    const tr = q.trigger;
+    const gate = (typeof val === "string") ? val : "";
+    const show = tr && gate === tr.whenValue;
 
+    const obs = Array.isArray(draft.furnitureObservations) ? draft.furnitureObservations : [];
+    return `
+      <div class="q" data-qkey="${escapeHtml(key)}" data-qtype="furniture_trigger">
+        <div class="ql">${escapeHtml(q.label)} ${req}</div>
+        ${help}
+        <div class="hr"></div>
+
+        <label>Odpověď</label>
+        <select data-gate="${escapeHtml(key)}">
+          <option value="">—</option>
+          ${(tr?.gateOptions||[]).map(o => `<option value="${escapeHtml(o)}" ${o===gate?"selected":""}>${escapeHtml(o)}</option>`).join("")}
+        </select>
+
+        ${show ? `
+          <div class="hr"></div>
+          <div class="row">
+            <span class="pill warn">Zaeviduj atyp / nábytek</span>
+            <button class="btn ok" data-addobs="1">Přidat záznam</button>
+          </div>
+
+          <div class="list">
+            ${obs.map(o => `
+              <div class="item">
+                <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+                  <div style="font-weight:900">${escapeHtml(o.typeId || "ATYP")}</div>
+                  <span class="pill">qty: ${escapeHtml(o.quantity ?? 1)}</span>
+                  <span class="pill">fotky: ${(o.photoIds||[]).length}</span>
+                  <span class="spacer"></span>
+                  <button class="btn ghost" data-delobs="${escapeHtml(o.id)}">Smazat</button>
+                </div>
+
+                <label>Název / label (ATYP)</label>
+                <input class="inp" data-obsfield="atypLabel" data-obsid="${escapeHtml(o.id)}" value="${escapeHtml(o.atypLabel||"")}" />
+
+                <label>Popis</label>
+                <textarea data-obsfield="description" data-obsid="${escapeHtml(o.id)}">${escapeHtml(o.description||"")}</textarea>
+
+                ${tr.form?.allowMultiple ? `
+                  <label>Množství</label>
+                  <input class="inp" type="number" min="1" data-obsfield="quantity" data-obsid="${escapeHtml(o.id)}" value="${escapeHtml(String(o.quantity ?? 1))}" />
+                ` : ``}
+
+                <div class="hr"></div>
+                <div class="row">
+                  <input class="inp" type="file" accept="image/*" capture="environment" multiple data-obsphinp="${escapeHtml(o.id)}"/>
+                  <button class="btn" data-obsphadd="${escapeHtml(o.id)}">Přidat fotky</button>
+                </div>
+
+                <div class="photoGrid">
+                  ${(o.photoIds||[]).map(pid => `
+                    <div class="ph" data-phid="${escapeHtml(pid)}" data-obsid="${escapeHtml(o.id)}">
+                      <img alt="${escapeHtml(pid)}" src="" />
+                      <button data-obsphrm="${escapeHtml(pid)}" data-obsid="${escapeHtml(o.id)}">✕</button>
+                    </div>
+                  `).join("")}
+                </div>
+              </div>
+            `).join("")}
+          </div>
+        ` : ``}
+      </div>
+    `;
+  }
+
+  // fallback
   return `
-    <div class="q" data-tid="${escapeHtml(templateId)}" data-qid="${escapeHtml(qid)}" data-qtype="${escapeHtml(q.type)}">
-      <div class="ql">${escapeHtml(q.label || qid)} ${required ? `<span class="req">* povinné</span>`:""}</div>
-      <div class="small">${escapeHtml(q.type)}</div>
-      <div class="hr"></div>
-      ${renderInput(q, val)}
+    <div class="q">
+      <div class="ql">${escapeHtml(q.label)} (unsupported type: ${escapeHtml(q.type)})</div>
     </div>
   `;
 }
 
-function validateRequired(draft){
-  const missing = [];
-  for (const tid of (draft.checklistTemplateIds||[])){
-    const tj = state.templatesById.get(tid);
-    if (!tj) continue;
-    const qs = collectQuestions(tj);
-    for (const { q } of qs){
-      if (!q.required) continue;
-      const v = draft.answers?.[tid]?.[q.id];
-      const empty =
-        v === undefined || v === null ||
-        (typeof v === "string" && v.trim()==="") ||
-        (Array.isArray(v) && v.length===0);
-      if (empty) missing.push({ templateId: tid, qid: q.id, label: q.label || q.id });
-    }
-  }
-  return missing;
-}
-
-/* ----------------- Photos ----------------- */
-function nextPhotoName(draft){
-  const n = (draft.attachments?.photos?.length || 0) + 1;
-  return `${String(n).padStart(3,"0")}.jpg`;
-}
-
-async function addPhotosToDraft(draft, files){
-  if (!files?.length) return;
-  if (!draft.attachments) draft.attachments = {};
-  if (!draft.attachments.photos) draft.attachments.photos = [];
-
-  for (const file of files){
-    const name = nextPhotoName(draft);
-    const key = `${draft.id}:${name}`;
-    await IDB.set("photos", key, { blob: file, type: file.type || "image/jpeg" });
-    draft.attachments.photos.push({ name, takenAt: nowISO() });
-  }
-  await saveDraft(draft);
-}
-
-async function removePhotoFromDraft(draft, name){
-  draft.attachments.photos = (draft.attachments.photos||[]).filter(p => p.name !== name);
-  await IDB.del("photos", `${draft.id}:${name}`);
-  await saveDraft(draft);
-}
-
-async function hydratePhotoThumbs(){
-  const d = state.currentDraft;
-  const nodes = document.querySelectorAll(".ph");
-  for (const node of nodes){
-    const name = node.getAttribute("data-ph");
-    const rec = await IDB.get("photos", `${d.id}:${name}`);
-    const img = node.querySelector("img");
+async function hydrateImages(){
+  // photo thumbs pro otázky i observations
+  const nodes = document.querySelectorAll(".ph[data-phid]");
+  for (const n of nodes){
+    const pid = n.getAttribute("data-phid");
+    const rec = await getPhoto(pid);
+    const img = n.querySelector("img");
     if (rec?.blob && img){
       img.src = URL.createObjectURL(rec.blob);
     }
   }
 }
 
-function downloadBlob(blob, filename){
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(()=>URL.revokeObjectURL(url), 5000);
-}
+function screenVisit(){
+  const draft = state.activeDraft;
+  if (!draft) return `<div class="card"><p>Načítám…</p></div>`;
 
-/* ----------------- Export ZIP ----------------- */
-async function exportDraftZip(draft){
-  const visit = {
-    version: 1,
-    id: draft.id,
-    createdAt: draft.createdAt,
-    partnerId: draft.partnerId,
-    partnerName: draft.partnerName,
-    storeId: draft.storeId,
-    storeName: draft.storeName,
-    visitDate: draft.visitDate,
-    visitTime: draft.visitTime,
-    note: draft.note || "",
-    checklistTemplateIds: draft.checklistTemplateIds || [],
-    templateVersions: draft.templateVersions || {},
-    packContext: draft.packContext || {},
-    answers: draft.answers || {},
-    attachments: { photos: (draft.attachments?.photos || []).map(p => ({ name: p.name, takenAt: p.takenAt })) },
-    status: draft.status || "open",
-  };
+  const tpl = getTemplateById(draft.templateId);
+  const store = getStoreBySap(draft.sapId);
 
-  const zipAvailable = typeof window.JSZip === "function";
-  if (!zipAvailable){
-    toast("JSZip chybí — exportuju aspoň visit.json (bez ZIP).", "warn");
-    downloadBlob(new Blob([JSON.stringify(visit,null,2)], {type:"application/json"}), `visit_${draft.id}.json`);
-    return;
-  }
-
-  const zip = new window.JSZip();
-  zip.file("visit.json", JSON.stringify(visit, null, 2));
-
-  const folder = zip.folder("photos");
-  for (const p of (draft.attachments?.photos||[])){
-    const rec = await IDB.get("photos", `${draft.id}:${p.name}`);
-    if (rec?.blob){
-      folder.file(p.name, await rec.blob.arrayBuffer());
-    }
-  }
-
-  const content = await zip.generateAsync({ type: "blob" });
-  const filename = `visit_export_${draft.id}.zip`;
-  downloadBlob(content, filename);
-  toast("Export hotovej ✓", "ok");
-}
-
-/* ----------------- Screens ----------------- */
-function screenHome(){
-  const packInfo = `
-    <div class="card">
-      <h2>Stav packu</h2>
-      <div class="row">${getPackPill()}</div>
-      <div class="hr"></div>
-      <div class="row">
-        <input id="filePack" class="inp" type="file" accept="application/json" />
-        <button class="btn" id="btnImportPack">Import Mobile Pack</button>
-      </div>
-      <p class="small">Mobil jen čte SSOT z packu. Nic v packu neupravuje.</p>
-    </div>
-  `;
-
-  const actions = `
-    <div class="card">
-      <h2>Akce</h2>
-      <div class="row">
-        <button class="btn ok" id="btnNewVisit" ${state.pack ? "" : "disabled"}>Nová návštěva</button>
-        <span class="pill ${state.pack ? "ok":"bad"}">${state.pack ? "můžeš tvořit návštěvy" : "nejdřív import pack"}</span>
-      </div>
-      <p class="small">Drafty se ukládají průběžně (offline friendly).</p>
-    </div>
-  `;
-
-  const draftList = `
-    <div class="card">
-      <h2>Rozpracované návštěvy</h2>
-      <div class="list">
-        ${state.drafts.length ? state.drafts.map(d => `
-          <div class="item">
-            <div style="display:flex;gap:10px;align-items:center">
-              <div style="font-weight:850">${escapeHtml(d.storeName || "—")}</div>
-              <span class="pill">${escapeHtml(d.visitDate||"")}</span>
-              <span class="pill">${escapeHtml(d.visitTime||"")}</span>
-              <span class="spacer"></span>
-              <button class="btn" data-open="${escapeHtml(d.id)}">Otevřít</button>
-              <button class="btn ghost" data-del="${escapeHtml(d.id)}">Smazat</button>
-            </div>
-            <div class="meta">${escapeHtml(d.partnerName||"")} • updated: ${escapeHtml(new Date(d.updatedAt||d.createdAt).toLocaleString())}</div>
-          </div>
-        `).join("") : `<p class="small">Zatím nic. Pojď udělat první návštěvu 😄</p>`}
-      </div>
-    </div>
-  `;
-
-  return `<div class="grid two">${packInfo}${actions}</div>${draftList}`;
-}
-
-function screenNewVisit(){
-  if (!ensurePackOrBlock()) return "";
-  const settings = state.pack.settings || {};
-  const partners = settings.partners || [];
-  const tpls = settings.checklistTemplates || [];
-
-  return `
-    <div class="card">
-      <h2>Nová návštěva</h2>
-
-      <label>Partner</label>
-      <select id="partnerSel">
-        <option value="">—</option>
-        ${partners.filter(p=>p.active!==false).map(p=>`<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("")}
-      </select>
-
-      <label>Prodejna</label>
-      <select id="storeSel" disabled>
-        <option value="">Nejdřív vyber partnera</option>
-      </select>
-
-      <div class="grid two">
-        <div>
-          <label>Datum</label>
-          <input id="visitDate" class="inp" type="date" value="${todayLocal()}" />
-        </div>
-        <div>
-          <label>Čas</label>
-          <input id="visitTime" class="inp" type="time" value="${timeLocal()}" />
-        </div>
-      </div>
-
-      <label>Poznámka</label>
-      <textarea id="note" placeholder="např. chybí cenovky…"></textarea>
-
-      <div class="hr"></div>
-      <h2>Checklist šablony</h2>
-
-      <div id="tplList" class="list">
-        ${tpls.filter(t=>t.enabled!==false).map(t=>{
-          const checked = t.onCreateDefault ? "checked" : "";
-          return `
-            <label class="item" style="display:flex;gap:10px;align-items:center;margin:0">
-              <input type="checkbox" value="${escapeHtml(t.id)}" ${checked}/>
-              <div>
-                <div style="font-weight:850">${escapeHtml(t.name || t.id)}</div>
-                <div class="small">id: ${escapeHtml(t.id)}</div>
-              </div>
-            </label>
-          `;
-        }).join("")}
-      </div>
-
-      <div class="hr"></div>
-      <div class="row">
-        <button class="btn ghost" data-nav="home">Zpět</button>
-        <span class="spacer"></span>
-        <button class="btn ok" id="btnStartFill">Začít vyplňovat</button>
-      </div>
-    </div>
-  `;
-}
-
-function screenFill(){
-  const d = state.currentDraft;
-  if (!d) return `<div class="card"><p>Načítám…</p></div>`;
-
-  const blocks = [];
-  for (const tid of (d.checklistTemplateIds||[])){
-    const tj = state.templatesById.get(tid);
-    if (!tj){
-      blocks.push(`<div class="card"><h2>${escapeHtml(tid)}</h2><p class="small">Šablona není v packu (chybí JSON).</p></div>`);
-      continue;
-    }
-    const qs = collectQuestions(tj);
-
-    let lastSec = null;
-    const html = [];
-    for (const row of qs){
-      if (row.sectionId !== lastSec){
-        lastSec = row.sectionId;
-        html.push(`<div class="hr"></div><div style="font-weight:900">${escapeHtml(row.sectionTitle || row.sectionId)}</div>`);
-      }
-      html.push(renderQuestion(d, tid, row.q));
-    }
-
-    blocks.push(`
+  if (!tpl){
+    return `
       <div class="card">
-        <h2>${escapeHtml(tj.name || tid)} <span class="pill">v${escapeHtml(String(tj.version||1))}</span></h2>
-        ${html.join("")}
+        <h2>Chybí template</h2>
+        <p class="small">TemplateId ${escapeHtml(draft.templateId)} není v packu. To je fail-fast chyba exportu z PC.</p>
+        <button class="btn" data-nav="home">Domů</button>
       </div>
-    `);
+    `;
+  }
+
+  const qs = collectQuestions(tpl);
+  let lastBlock = null;
+  const parts = [];
+
+  for (const row of qs){
+    if (row.blockId !== lastBlock){
+      lastBlock = row.blockId;
+      parts.push(`<div class="card"><h2>${escapeHtml(row.blockTitle || row.blockId)}</h2>`);
+    }
+    parts.push(renderQuestion(draft, row.q));
+    // uzavřít card bloky na hranici blocků:
+    const next = qs[qs.findIndex(x => x === row) + 1];
+    if (!next || next.blockId !== row.blockId) parts.push(`</div>`);
   }
 
   return `
     <div class="card">
-      <h2>${escapeHtml(d.storeName || "Návštěva")}</h2>
-      <p>${escapeHtml(d.partnerName||"")} • ${escapeHtml(d.visitDate||"")} ${escapeHtml(d.visitTime||"")}</p>
+      <h2>${escapeHtml(store?.name || draft.sapId)}</h2>
       <div class="row">
+        <span class="pill">${escapeHtml(draft.date)}</span>
+        <span class="pill">${escapeHtml(tpl.name || tpl.templateId)}</span>
+        <span class="pill warn">${escapeHtml(draft.status)}</span>
+        <span class="spacer"></span>
         <button class="btn ghost" data-nav="home">Domů</button>
-        <button class="btn" data-nav="photos">Na fotky</button>
-        <span class="spacer"></span>
-        <span class="pill">autosave: zapnuto</span>
-      </div>
-    </div>
-    ${blocks.join("")}
-  `;
-}
-
-function screenPhotos(){
-  const d = state.currentDraft;
-  if (!d) return `<div class="card"><p>Načítám…</p></div>`;
-
-  const photos = d.attachments?.photos || [];
-  return `
-    <div class="card">
-      <h2>Fotky</h2>
-      <p class="small">Ukládám do IndexedDB. Offline to jede v pohodě.</p>
-
-      <div class="row">
-        <input id="filePhotos" class="inp" type="file" accept="image/*" capture="environment" multiple />
-        <button class="btn" id="btnAddPhotos">Přidat</button>
-      </div>
-
-      <div class="hr"></div>
-
-      <div class="photoGrid">
-        ${photos.map(p=>`
-          <div class="ph" data-ph="${escapeHtml(p.name)}">
-            <img alt="${escapeHtml(p.name)}" src="" />
-            <button data-rm="${escapeHtml(p.name)}">✕</button>
-          </div>
-        `).join("")}
-      </div>
-
-      <div class="hr"></div>
-      <div class="row">
-        <button class="btn ghost" data-nav="fill">Zpět</button>
-        <span class="spacer"></span>
-        <button class="btn ok" data-nav="export">Export</button>
-      </div>
-    </div>
-  `;
-}
-
-function screenExport(){
-  const d = state.currentDraft;
-  if (!d) return `<div class="card"><p>Načítám…</p></div>`;
-
-  const missing = validateRequired(d);
-  const warn = missing.length
-    ? `<div class="pill warn">Chybí ${missing.length} povinných odpovědí</div>`
-    : `<div class="pill ok">Povinné odpovědi OK</div>`;
-
-  return `
-    <div class="card">
-      <h2>Export</h2>
-      <div class="row">
-        ${warn}
-        <span class="pill">fotky: ${(d.attachments?.photos||[]).length}</span>
-      </div>
-
-      <div class="hr"></div>
-      <div class="row">
-        <button class="btn ghost" data-nav="photos">Zpět</button>
-        <span class="spacer"></span>
-        <button class="btn ok" id="btnDoExport">Exportovat visit_export.zip</button>
-      </div>
-
-      <p class="small">ZIP: <b>visit.json</b> + <b>photos/001.jpg…</b></p>
-    </div>
-  `;
-}
-
-/* ----------------- Render ----------------- */
-async function render(){
-  if (["fill","photos","export"].includes(state.route.name)){
-    await openDraft(state.route.params.id);
-  } else {
-    state.currentDraft = null;
-  }
-
-  const root = $("#app");
-  if (!root) return;
-
-  let html = "";
-  if (state.route.name === "home") html = screenHome();
-  if (state.route.name === "new") html = screenNewVisit();
-  if (state.route.name === "fill") html = screenFill();
-  if (state.route.name === "photos") html = screenPhotos();
-  if (state.route.name === "export") html = screenExport();
-
-  root.innerHTML = html;
-
-  if (state.route.name === "photos"){
-    await hydratePhotoThumbs();
-  }
-}
-
-/* ----------------- ONE event handler (delegace) ----------------- */
-document.addEventListener("click", async (e) => {
-  const t = e.target;
-
-  // Sidebar / nav
-  const navBtn = t.closest("[data-nav]");
-  if (navBtn){
-    const dest = navBtn.getAttribute("data-nav");
-    if (dest === "home") return navigate("home");
-    if (dest === "new") return navigate("new");
-    if (!state.currentDraft) return;
-
-    if (dest === "fill") return navigate("fill", { id: state.currentDraft.id });
-    if (dest === "photos") return navigate("photos", { id: state.currentDraft.id });
-    if (dest === "export") return navigate("export", { id: state.currentDraft.id });
-  }
-
-  // Home actions
-  if (t.id === "btnImportPack"){
-    const f = $("#filePack")?.files?.[0];
-    if (!f) return toast("Vyber soubor packu.", "bad");
-    return importPackFromFile(f);
-  }
-  if (t.id === "btnNewVisit"){
-    return navigate("new");
-  }
-
-  // Draft open/delete
-  const openBtn = t.closest("[data-open]");
-  if (openBtn){
-    return navigate("fill", { id: openBtn.getAttribute("data-open") });
-  }
-  const delBtn = t.closest("[data-del]");
-  if (delBtn){
-    return deleteDraft(delBtn.getAttribute("data-del"));
-  }
-
-  // New visit start
-  if (t.id === "btnStartFill"){
-    const partnerId = $("#partnerSel")?.value || "";
-    const storeId = $("#storeSel")?.value || "";
-    if (!partnerId) return toast("Vyber partnera.", "bad");
-    if (!storeId) return toast("Vyber prodejnu.", "bad");
-
-    const visitDate = $("#visitDate")?.value || todayLocal();
-    const visitTime = $("#visitTime")?.value || timeLocal();
-    const note = $("#note")?.value || "";
-    const tplIds = [...document.querySelectorAll("#tplList input[type=checkbox]:checked")].map(i=>i.value);
-    if (!tplIds.length) return toast("Vyber aspoň jednu šablonu.", "bad");
-
-    return createNewDraft({ partnerId, storeId, visitDate, visitTime, note, templateIds: tplIds });
-  }
-
-  // Partner change -> load stores
-  if (t.id === "partnerSel"){
-    // (click event sem často nedojde), řešíme níž "change"
-  }
-
-  // Boolean answer buttons
-  const setBtn = t.closest("button[data-set]");
-  if (setBtn){
-    const qel = setBtn.closest(".q");
-    if (!qel || !state.currentDraft) return;
-    const tid = qel.getAttribute("data-tid");
-    const qid = qel.getAttribute("data-qid");
-    const v = setBtn.getAttribute("data-set") === "true";
-    const d = state.currentDraft;
-    d.answers = d.answers || {};
-    d.answers[tid] = d.answers[tid] || {};
-    d.answers[tid][qid] = v;
-    await saveDraft(d);
-    return render();
-  }
-
-  // Multi remove photo
-  const rm = t.closest("[data-rm]");
-  if (rm){
-    const name = rm.getAttribute("data-rm");
-    await removePhotoFromDraft(state.currentDraft, name);
-    return navigate("photos", { id: state.currentDraft.id });
-  }
-
-  // Add photos
-  if (t.id === "btnAddPhotos"){
-    const files = $("#filePhotos")?.files;
-    if (!files || !files.length) return toast("Vyber fotky.", "bad");
-    await addPhotosToDraft(state.currentDraft, [...files]);
-    return navigate("photos", { id: state.currentDraft.id });
-  }
-
-  // Export
-  if (t.id === "btnDoExport"){
-    return exportDraftZip(state.currentDraft);
-  }
-});
-
-// Change/input handler (delegace)
-document.addEventListener("change", async (e) => {
-  const t = e.target;
-
-  // Partner -> stores
-  if (t.id === "partnerSel"){
-    const pid = t.value;
-    const storeSel = $("#storeSel");
-    const stores = (state.pack?.settings?.stores || []).filter(s => s.active!==false && s.partnerId === pid);
-    storeSel.innerHTML = `<option value="">—</option>` + stores.map(s=>`<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join("");
-    storeSel.disabled = !pid;
-    return;
-  }
-
-  // Multi checkboxes
-  if (t.matches("input[type=checkbox][data-multi]")){
-    const qel = t.closest(".q");
-    if (!qel || !state.currentDraft) return;
-    const tid = qel.getAttribute("data-tid");
-    const qid = qel.getAttribute("data-qid");
-    const d = state.currentDraft;
-    d.answers = d.answers || {};
-    d.answers[tid] = d.answers[tid] || {};
-    const arr = new Set(Array.isArray(d.answers[tid][qid]) ? d.answers[tid][qid] : []);
-    if (t.checked) arr.add(t.value); else arr.delete(t.value);
-    d.answers[tid][qid] = [...arr];
-    await saveDraft(d);
-    return;
-  }
-
-  // Single/select/number/scale/text
-  const qel = t.closest(".q");
-  if (!qel || !state.currentDraft) return;
-  if (!t.matches("input.inp, select, textarea")) return;
-
-  const tid = qel.getAttribute("data-tid");
-  const qid = qel.getAttribute("data-qid");
-  const qtype = qel.getAttribute("data-qtype");
-
-  const d = state.currentDraft;
-  d.answers = d.answers || {};
-  d.answers[tid] = d.answers[tid] || {};
-
-  let v = t.value;
-  if (qtype === "number" || qtype === "scale"){
-    v = (v === "") ? null : Number(v);
-    if (Number.isNaN(v)) v = null;
-  } else if (qtype === "single"){
-    v = (v === "") ? null : String(v);
-  } else {
-    v = String(v);
-  }
-
-  d.answers[tid][qid] = v;
-  await saveDraft(d);
-});
-
-/* ----------------- PWA install + SW ----------------- */
-function setupInstall(){
-  window.addEventListener("beforeinstallprompt", (e)=>{
-    e.preventDefault();
-    state.deferredPrompt = e;
-    const b = $("#btnInstall");
-    if (b){ b.hidden = false; }
-  });
-
-  $("#btnInstall")?.addEventListener("click", async ()=>{
-    if (!state.deferredPrompt) return;
-    state.deferredPrompt.prompt();
-    await state.deferredPrompt.userChoice;
-    state.deferredPrompt = null;
-    $("#btnInstall").hidden = true;
-  });
-
-  if ("serviceWorker" in navigator){
-    navigator.serviceWorker.register("./sw.js").catch(()=>{});
-  }
-}
-
-/* ----------------- Boot ----------------- */
-await loadAll();
-await render();
-setupInstall();
+        <button class="btn bad" data-cancelvisit="${escapeHtml(draft.visitId)}">Zrušit</button>
+        <button class="btn ok" data-submit="${escapeHtml(d
