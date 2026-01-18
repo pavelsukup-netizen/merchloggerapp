@@ -190,6 +190,64 @@ function collectQuestions(tpl){
   }
   return out;
 }
+function getAnswerValue(draft, key){
+  return (draft?.answers || {})[key];
+}
+
+function normalizeCond(cond){
+  let op = cond?.op;
+  let value = cond?.value;
+
+  // backward compat: { key, equals: ... }
+  if (!op && cond && cond.equals !== undefined) { op = "eq"; value = cond.equals; }
+  if (!op && cond && cond.notEquals !== undefined) { op = "neq"; value = cond.notEquals; }
+
+  // map "ANO/NE" -> boolean (pro checkboxy)
+  if (value === "ANO") value = true;
+  if (value === "NE") value = false;
+
+  return { ...cond, op, value };
+}
+
+function evalCond(draft, condRaw){
+  const cond = normalizeCond(condRaw || {});
+  const v = getAnswerValue(draft, cond.key);
+
+  switch (cond.op) {
+    case "eq":  return v === cond.value;
+    case "neq": return v !== cond.value;
+    case "in":  return Array.isArray(cond.value) ? cond.value.includes(v) : false;
+    case "truthy":
+      if (typeof v === "boolean") return v === true;
+      if (typeof v === "string") return v.trim().length > 0;
+      if (v && typeof v === "object" && Array.isArray(v.photoIds)) return v.photoIds.length > 0;
+      return !!v;
+    case "falsy":
+      if (typeof v === "boolean") return v === false;
+      if (typeof v === "string") return v.trim().length === 0;
+      if (v && typeof v === "object" && Array.isArray(v.photoIds)) return v.photoIds.length === 0;
+      return !v;
+    default:
+      return true; // neznámá operace -> neblokuj
+  }
+}
+
+function isQuestionActive(draft, q){
+  const d = q?.dependsOn;
+  if (!d) return true;
+
+  // single condition
+  if (d.key) return evalCond(draft, d);
+
+  // AND
+  if (Array.isArray(d.all)) return d.all.every(c => evalCond(draft, c));
+
+  // OR
+  if (Array.isArray(d.any)) return d.any.some(c => evalCond(draft, c));
+
+  return true;
+}
+
 
 /* ----------------- render ----------------- */
 function render(){
@@ -316,7 +374,7 @@ function renderTemplateForm(tpl, draft){
     return `
       <div class="card">
         <h2>${esc(b.title || b.id)}</h2>
-        ${qs.map(q => renderQuestion(q, draft)).join("")}
+        ${qs.filter(q => isQuestionActive(draft, q)).map(q => renderQuestion(q, draft)).join("")}
       </div>
     `;
   }).join("");
@@ -553,6 +611,7 @@ function validateDraftBeforeDone(draft){
   const qs = collectQuestions(tpl);
 
   for (const q of qs){
+      if (!isQuestionActive(draft, q)) continue;
     const key = q.key;
     const v = draft.answers?.[key];
 
