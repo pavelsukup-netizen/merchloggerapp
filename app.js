@@ -6,8 +6,8 @@ const SCHEMA_VERSION = 1;
 
 const state = {
   pack: null,
-  uiDate: null,
   deviceId: null,
+  uiDate: null,
   drafts: new Map(),   // visitId -> draft
   route: { name: "home", visitId: null }
 };
@@ -37,11 +37,10 @@ function esc(s){
 }
 function toast(msg){
   console.log("[mobile]", msg);
-  // pokud máš v CSS toast komponentu, můžeš to později napojit
   alert(msg);
 }
 
-/* ----------------- validation ----------------- */
+/* ----------------- validation: jobpack ----------------- */
 function validateJobPack(pack){
   const errors = [];
   if (!pack || pack.schema !== JOBPACK_SCHEMA || pack.schemaVersion !== 1){
@@ -67,6 +66,7 @@ function validateJobPack(pack){
     if (v.templateId && !tplSet.has(v.templateId)) errors.push(`Visit ${v.visitId} odkazuje na neznámý templateId: ${v.templateId}`);
   }
 
+  // duplicitní keys
   for (const t of (pack.templates||[])){
     const keys = new Set();
     const dups = new Set();
@@ -83,6 +83,7 @@ function validateJobPack(pack){
         if (q.type === "furniture_trigger"){
           const tr = q.trigger;
           if (!tr || tr.kind !== "furniture") errors.push(`Template ${t.templateId}: furniture_trigger ${q.key} chybí trigger.kind="furniture"`);
+          if (!tr?.whenValue) errors.push(`Template ${t.templateId}: furniture_trigger ${q.key} chybí whenValue`);
         }
       }
     }
@@ -101,11 +102,9 @@ async function loadDeviceId(){
   }
   state.deviceId = did;
 }
-
 async function loadPack(){
   state.pack = await IDB.get(IDB.STORES.pack, "current");
 }
-
 async function loadDrafts(){
   const keys = await IDB.keys(IDB.STORES.drafts);
   state.drafts = new Map();
@@ -114,7 +113,6 @@ async function loadDrafts(){
     if (d) state.drafts.set(k, d);
   }
 }
-
 function storeBySap(sapId){
   return (state.pack?.stores || []).find(s => s.sapId === sapId) || null;
 }
@@ -130,6 +128,7 @@ function ensureDraft(visit){
   const tpl = tplById(visit.templateId);
 
   const d = {
+    schemaVersion: 1,
     visitId: visit.visitId,
     sapId: visit.sapId,
     date: visit.date,
@@ -143,7 +142,6 @@ function ensureDraft(visit){
     furnitureObservations: []
   };
 
-  // info navíc (nevadí)
   d.storeName = st?.name || "";
   d.retailerId = st?.retailerId || "";
 
@@ -156,7 +154,45 @@ async function saveDraft(d){
   state.drafts.set(d.visitId, d);
 }
 
-/* ----------------- rendering ----------------- */
+/* ----------------- photos helpers ----------------- */
+async function addPhotosToDB(files, visitId){
+  const photoIds = [];
+  for (const f of files){
+    const photoId = uuid();
+    const mime = f.type || "image/jpeg";
+    await IDB.set(IDB.STORES.photos, photoId, {
+      blob: f,
+      mime,
+      takenAt: nowISO(),
+      visitId
+    });
+    photoIds.push(photoId);
+  }
+  return photoIds;
+}
+async function getPhotoRec(photoId){
+  return await IDB.get(IDB.STORES.photos, photoId);
+}
+function extFromMime(mime){
+  const m = (mime || "").toLowerCase();
+  if (m.includes("png")) return "png";
+  if (m.includes("webp")) return "webp";
+  if (m.includes("heic")) return "heic";
+  return "jpg";
+}
+
+/* ----------------- template traversal ----------------- */
+function collectQuestions(tpl){
+  const out = [];
+  for (const b of (tpl.blocks||[])){
+    for (const q of (b.questions||[])){
+      out.push(q);
+    }
+  }
+  return out;
+}
+
+/* ----------------- render ----------------- */
 function render(){
   const root = rootEl();
   const date = state.uiDate || todayLocal();
@@ -185,12 +221,13 @@ function render(){
           <button class="btn bad" data-cancelvisit="${esc(visit.visitId)}">Zrušit</button>
           <button class="btn ok" data-done="${esc(visit.visitId)}">Dokončit</button>
         </div>
-        <p class="small">Zatím jednoduchý editor (checkbox/text/number/select + furniture_trigger gate). Fotky doplníme hned jako další krok.</p>
+        <p class="small">visitId: ${esc(visit.visitId)}</p>
       </div>
 
       ${renderTemplateForm(tpl, draft)}
     `;
 
+    hydratePhotoThumbs().catch(()=>{});
     bindEvents();
     return;
   }
@@ -239,11 +276,11 @@ function renderVisits(date){
   if (!state.pack) return `<p class="small">Nejdřív importuj pack.</p>`;
 
   const visits = (state.pack.visits || [])
-    .filter(v => v.date === date && v.status !== "cancelled");
+    .filter(v => v.date === date && v.status !== "cancelled")
+    .slice()
+    .sort((a,b) => String(a.startTime||"99:99").localeCompare(String(b.startTime||"99:99")));
 
   if (!visits.length) return `<p class="small">Na tenhle den nejsou v packu žádný visits.</p>`;
-
-  visits.sort((a,b) => String(a.startTime||"99:99").localeCompare(String(b.startTime||"99:99")));
 
   return `
     <div class="list">
@@ -286,6 +323,148 @@ function renderTemplateForm(tpl, draft){
   }).join("");
 }
 
+/* ----------------- QUESTION RENDERERS ----------------- */
+function checkboxButtons(label, key, selected){
+  // UX: jen 2 tlačítka; selected = zvýraznění tlačítka (inline outline)
+  const yesSel = selected === true;
+  const noSel  = selected === false;
+
+  const yesStyle = yesSel ? `style="outline:3px solid rgba(16,185,129,.55); outline-offset:2px"` : "";
+  const noStyle  = noSel  ? `style="outline:3px solid rgba(244,63,94,.55); outline-offset:2px"` : "";
+
+  return `
+    <div class="row">
+      <button class="btn ok" data-bool="true" data-qkey="${esc(key)}" aria-pressed="${yesSel}" ${yesStyle}>ANO</button>
+      <button class="btn bad" data-bool="false" data-qkey="${esc(key)}" aria-pressed="${noSel}" ${noStyle}>NE</button>
+    </div>
+  `;
+}
+
+function renderPhotoQuestion(q, draft){
+  const key = q.key;
+  const cfg = q.photo || {};
+  const min = Number.isFinite(cfg.photosMin) ? cfg.photosMin : 1;
+  const max = Number.isFinite(cfg.photosMax) ? cfg.photosMax : 10;
+
+  const cur = draft.answers?.[key];
+  const ids = (cur && typeof cur === "object" && Array.isArray(cur.photoIds)) ? cur.photoIds : [];
+
+  return `
+    <div class="q" data-qtype="photo" data-qkey="${esc(key)}" data-min="${esc(min)}" data-max="${esc(max)}">
+      <div class="ql">${esc(q.label)} ${q.required ? `<span class="req">*</span>` : ""}</div>
+      ${q.help ? `<div class="small">${esc(q.help)}</div>` : ""}
+
+      <div class="hr"></div>
+
+      <div class="row">
+        <input class="inp" type="file" accept="image/*" capture="environment" multiple data-phinp="${esc(key)}" />
+        <button class="btn" data-phadd="${esc(key)}">Přidat fotky</button>
+        <span class="pill">fotky: ${ids.length} / ${max}</span>
+        <span class="pill">${min}-${max}</span>
+      </div>
+
+      <div class="photoGrid">
+        ${ids.map(pid => `
+          <div class="ph" data-phid="${esc(pid)}" data-qkey="${esc(key)}">
+            <img alt="${esc(pid)}" src="" />
+            <button class="btn ghost" data-phrm="${esc(pid)}" data-qkey="${esc(key)}">✕</button>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
+function renderFurnitureTrigger(q, draft){
+  const key = q.key;
+  const gate = (typeof draft.answers?.[key] === "string") ? draft.answers[key] : "";
+  const tr = q.trigger || {};
+  const whenValue = tr.whenValue || "ANO";
+  const show = gate === whenValue;
+
+  const allowMultiple = !!tr.form?.allowMultiple;
+  const requireDescription = !!tr.form?.requireDescription;
+  const photosMin = Number.isFinite(tr.form?.photosMin) ? tr.form.photosMin : 1;
+  const photosMax = Number.isFinite(tr.form?.photosMax) ? tr.form.photosMax : 10;
+
+  const obs = Array.isArray(draft.furnitureObservations) ? draft.furnitureObservations : [];
+  const canAddObs = allowMultiple ? true : obs.length < 1;
+
+  return `
+    <div class="q" data-qtype="furniture_trigger" data-qkey="${esc(key)}">
+      <div class="ql">${esc(q.label)} ${q.required ? `<span class="req">*</span>` : ""}</div>
+      ${q.help ? `<div class="small">${esc(q.help)}</div>` : ""}
+
+      <div class="hr"></div>
+
+      <label>Odpověď</label>
+      <select class="inp" data-gate="1" data-qkey="${esc(key)}">
+        <option value="">—</option>
+        ${(tr.gateOptions || ["NE","ANO"]).map(o => `<option value="${esc(o)}" ${o===gate?"selected":""}>${esc(o)}</option>`).join("")}
+      </select>
+
+      ${show ? `
+        <div class="hr"></div>
+        <div class="row">
+          <span class="pill warn">Eviduj atypický nábytek</span>
+          <span class="pill">${photosMin}-${photosMax} fotek</span>
+          ${requireDescription ? `<span class="pill bad">popis povinný</span>` : `<span class="pill">popis volitelný</span>`}
+          <span class="spacer"></span>
+          <button class="btn ok" data-addobs="${esc(key)}" ${canAddObs ? "" : "disabled"}>Přidat záznam</button>
+        </div>
+
+        <div class="list">
+          ${obs.map(o => renderFurnitureObs(o, { allowMultiple, requireDescription, photosMin, photosMax })).join("")}
+        </div>
+      ` : ``}
+    </div>
+  `;
+}
+
+function renderFurnitureObs(o, rules){
+  const qty = Number.isFinite(Number(o.quantity)) ? Number(o.quantity) : 1;
+  const photosCount = (o.photoIds || []).length;
+
+  return `
+    <div class="item">
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <div style="font-weight:900">ATYP</div>
+        <span class="pill">qty: ${esc(qty)}</span>
+        <span class="pill">fotky: ${esc(photosCount)}</span>
+        <span class="pill">${esc(rules.photosMin)}-${esc(rules.photosMax)}</span>
+        <span class="spacer"></span>
+        <button class="btn ghost" data-delobs="${esc(o.id)}">Smazat</button>
+      </div>
+
+      <label>Název (atypLabel)</label>
+      <input class="inp" data-obsfield="atypLabel" data-obsid="${esc(o.id)}" value="${esc(o.atypLabel || "")}" />
+
+      <label>Popis ${rules.requireDescription ? `<span class="req">*</span>` : ""}</label>
+      <textarea data-obsfield="description" data-obsid="${esc(o.id)}">${esc(o.description || "")}</textarea>
+
+      ${rules.allowMultiple ? `
+        <label>Množství <span class="req">*</span></label>
+        <input class="inp" type="number" min="1" data-obsfield="quantity" data-obsid="${esc(o.id)}" value="${esc(String(qty))}" />
+      ` : ``}
+
+      <div class="hr"></div>
+      <div class="row">
+        <input class="inp" type="file" accept="image/*" capture="environment" multiple data-obsphinp="${esc(o.id)}"/>
+        <button class="btn" data-obsphadd="${esc(o.id)}">Přidat fotky</button>
+      </div>
+
+      <div class="photoGrid">
+        ${(o.photoIds||[]).map(pid => `
+          <div class="ph" data-phid="${esc(pid)}" data-obsid="${esc(o.id)}">
+            <img alt="${esc(pid)}" src="" />
+            <button class="btn ghost" data-obsphrm="${esc(pid)}" data-obsid="${esc(o.id)}">✕</button>
+          </div>
+        `).join("")}
+      </div>
+    </div>
+  `;
+}
+
 function renderQuestion(q, draft){
   const key = q.key;
   const val = draft.answers?.[key];
@@ -294,16 +473,12 @@ function renderQuestion(q, draft){
   const help = q.help ? `<div class="small">${esc(q.help)}</div>` : "";
 
   if (q.type === "checkbox"){
-    const v = val === true ? "true" : val === false ? "false" : "";
+    const selected = (val === true) ? true : (val === false ? false : null);
     return `
       <div class="q" data-qtype="checkbox" data-qkey="${esc(key)}">
         <div class="ql">${esc(q.label)} ${req}</div>
         ${help}
-        <div class="row">
-          <button class="btn ok" data-bool="true" ${v==="true"?"disabled":""}>Ano</button>
-          <button class="btn bad" data-bool="false" ${v==="false"?"disabled":""}>Ne</button>
-          <span class="pill">${v===""?"—":(v==="true"?"Ano":"Ne")}</span>
-        </div>
+        ${checkboxButtons(q.label, key, selected)}
       </div>
     `;
   }
@@ -343,37 +518,123 @@ function renderQuestion(q, draft){
     `;
   }
 
+  if (q.type === "photo"){
+    return renderPhotoQuestion(q, draft);
+  }
+
   if (q.type === "furniture_trigger"){
-    const gate = typeof val === "string" ? val : "";
-    const tr = q.trigger || null;
-    const show = tr && gate === tr.whenValue;
-
-    return `
-      <div class="q" data-qtype="furniture_trigger" data-qkey="${esc(key)}">
-        <div class="ql">${esc(q.label)} ${req}</div>
-        ${help}
-        <select class="inp" data-gate="1">
-          <option value="">—</option>
-          ${(tr?.gateOptions||[]).map(o => `<option value="${esc(o)}" ${o===gate?"selected":""}>${esc(o)}</option>`).join("")}
-        </select>
-
-        ${show ? `<div class="small" style="margin-top:8px">Gate = ANO → tady pak doplníme formulář na evidenci nábytku + fotky.</div>` : ``}
-      </div>
-    `;
+    return renderFurnitureTrigger(q, draft);
   }
 
   return `
     <div class="q">
       <div class="ql">${esc(q.label)} <span class="pill">type: ${esc(q.type)}</span></div>
-      <div class="small">Tenhle typ zatím UI nepodporuje (doplníme).</div>
+      <div class="small">Tenhle typ zatím UI nepodporuje.</div>
     </div>
   `;
 }
 
-/* ----------------- export (zatím základ) ----------------- */
-async function exportDay(date){
+/* ----------------- hydrate photo thumbs ----------------- */
+async function hydratePhotoThumbs(){
+  const nodes = document.querySelectorAll(".ph[data-phid] img");
+  for (const img of nodes){
+    const holder = img.closest(".ph");
+    const pid = holder?.getAttribute("data-phid");
+    if (!pid) continue;
+
+    const rec = await getPhotoRec(pid);
+    if (rec?.blob){
+      img.src = URL.createObjectURL(rec.blob);
+    }
+  }
+}
+
+/* ----------------- hard validation (DONE) ----------------- */
+function validateDraftBeforeDone(draft){
+  const tpl = tplById(draft.templateId);
+  if (!tpl) return ["Chybí template v packu (fail-fast)."];
+
+  const errors = [];
+  const qs = collectQuestions(tpl);
+
+  for (const q of qs){
+    const key = q.key;
+    const v = draft.answers?.[key];
+
+    if (q.type === "checkbox"){
+      if (q.required && v !== true && v !== false) errors.push(`Chybí odpověď ANO/NE: ${q.label}`);
+      continue;
+    }
+
+    if (q.type === "text"){
+      if (q.required && (typeof v !== "string" || v.trim() === "")) errors.push(`Chybí text: ${q.label}`);
+      continue;
+    }
+
+    if (q.type === "number"){
+      if (q.required && (typeof v !== "number" || Number.isNaN(v))) errors.push(`Chybí číslo: ${q.label}`);
+      continue;
+    }
+
+    if (q.type === "select"){
+      if (q.required && (typeof v !== "string" || v.trim() === "")) errors.push(`Chybí výběr: ${q.label}`);
+      if (typeof v === "string" && v.trim() !== "" && Array.isArray(q.options) && !q.options.includes(v)) errors.push(`Neplatná možnost u: ${q.label}`);
+      continue;
+    }
+
+    if (q.type === "photo"){
+      const cfg = q.photo || {};
+      const min = Number.isFinite(cfg.photosMin) ? cfg.photosMin : 1;
+      const max = Number.isFinite(cfg.photosMax) ? cfg.photosMax : 10;
+
+      const ids = (v && typeof v === "object" && Array.isArray(v.photoIds)) ? v.photoIds : [];
+      if (q.required && ids.length < min) errors.push(`Chybí fotky (min ${min}): ${q.label}`);
+      if (ids.length > max) errors.push(`Moc fotek (max ${max}): ${q.label}`);
+      continue;
+    }
+
+    if (q.type === "furniture_trigger"){
+      // gate
+      if (q.required && (typeof v !== "string" || v.trim() === "")) errors.push(`Chybí odpověď (NE/ANO): ${q.label}`);
+
+      const tr = q.trigger || {};
+      const when = tr.whenValue || "ANO";
+      if (v === when){
+        const obs = Array.isArray(draft.furnitureObservations) ? draft.furnitureObservations : [];
+        if (!obs.length) errors.push(`Musíš přidat aspoň 1 záznam atyp nábytku: ${q.label}`);
+
+        const requireDescription = !!tr.form?.requireDescription;
+        const allowMultiple = !!tr.form?.allowMultiple;
+        const photosMin = Number.isFinite(tr.form?.photosMin) ? tr.form.photosMin : 1;
+        const photosMax = Number.isFinite(tr.form?.photosMax) ? tr.form.photosMax : 10;
+
+        for (const o of obs){
+          const pcount = (o.photoIds || []).length;
+          if (pcount < photosMin) errors.push(`ATYP: chybí fotky (min ${photosMin}).`);
+          if (pcount > photosMax) errors.push(`ATYP: moc fotek (max ${photosMax}).`);
+
+          if (requireDescription){
+            const has = (o.description && o.description.trim()) || (o.atypLabel && o.atypLabel.trim());
+            if (!has) errors.push(`ATYP: chybí popis nebo název.`);
+          }
+
+          if (allowMultiple){
+            const qty = Number(o.quantity);
+            if (!Number.isFinite(qty) || qty < 1) errors.push(`ATYP: množství musí být >= 1.`);
+          }
+        }
+      }
+      continue;
+    }
+  }
+
+  return errors;
+}
+
+/* ----------------- export ZIP (manifest.json + photos/*) ----------------- */
+async function exportDayZip(date){
   if (!state.pack){ toast("Nejdřív importuj pack."); return; }
-  if (typeof window.JSZip !== "function"){ toast("JSZip není dostupný."); return; }
+  if (typeof window.JSZip !== "function"){ toast("JSZip není dostupný (offline bez cache?)."); return; }
 
   const merchId = state.pack.merch?.id || "unknown";
   const drafts = [...state.drafts.values()].filter(d => d.date === date && (d.status === "done" || d.status === "cancelled"));
@@ -383,17 +644,54 @@ async function exportDay(date){
     return;
   }
 
+  const exportId = uuid();
+  const createdAt = nowISO();
+
+  // seber všechny photoIds
+  const photoSet = new Set();
+  for (const d of drafts){
+    for (const vv of Object.values(d.answers || {})){
+      if (vv && typeof vv === "object" && Array.isArray(vv.photoIds)){
+        vv.photoIds.forEach(pid => photoSet.add(pid));
+      }
+    }
+    for (const o of (d.furnitureObservations || [])){
+      (o.photoIds || []).forEach(pid => photoSet.add(pid));
+    }
+  }
+
   const zip = new window.JSZip();
+  const photosFolder = zip.folder("photos");
+  const photosMeta = [];
+
+  for (const pid of [...photoSet]){
+    const rec = await getPhotoRec(pid);
+    const mime = rec?.mime || "image/jpeg";
+    const ext = extFromMime(mime);
+    const fileName = `photos/${pid}.${ext}`;
+
+    photosMeta.push({
+      photoId: pid,
+      fileName,
+      mime,
+      takenAt: rec?.takenAt || null
+    });
+
+    if (rec?.blob){
+      photosFolder.file(`${pid}.${ext}`, await rec.blob.arrayBuffer());
+    }
+  }
+
   const manifest = {
     schema: RESULTS_SCHEMA,
     schemaVersion: SCHEMA_VERSION,
-    exportId: uuid(),
+    exportId,
     deviceId: state.deviceId,
     merchId,
     date,
-    createdAt: nowISO(),
+    createdAt,
     packRef: { packId: state.pack.packId, checksum: state.pack.checksum?.value || null },
-    photos: [],
+    photos: photosMeta,
     visits: drafts.map(d => ({
       visitId: d.visitId,
       sapId: d.sapId,
@@ -405,16 +703,26 @@ async function exportDay(date){
       templateId: d.templateId,
       templateVersion: d.templateVersion,
       answers: d.answers || {},
-      furnitureObservations: d.furnitureObservations || []
+      furnitureObservations: (d.furnitureObservations || []).map(o => ({
+        id: o.id,
+        typeId: "ATYP",
+        atypLabel: o.atypLabel || "",
+        description: o.description || "",
+        quantity: o.quantity ?? 1,
+        photoIds: o.photoIds || [],
+        classifiedTypeId: null
+      }))
     }))
   };
 
   zip.file("manifest.json", JSON.stringify(manifest, null, 2));
+
   const blob = await zip.generateAsync({ type: "blob" });
+  const file = `results_${date}_${merchId}.zip`;
 
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `results_${date}_${merchId}.zip`;
+  a.download = file;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -425,7 +733,6 @@ async function exportDay(date){
 
 /* ----------------- events ----------------- */
 function bindEvents(){
-  // delegace
   document.onclick = async (e) => {
     const t = e.target;
 
@@ -440,6 +747,7 @@ function bindEvents(){
       const f = $("#filePack")?.files?.[0];
       if (!f){ toast("Vyber soubor jobpacku."); return; }
       const txt = await f.text();
+
       let pack;
       try { pack = JSON.parse(txt); }
       catch { toast("Tohle není validní JSON."); return; }
@@ -460,7 +768,7 @@ function bindEvents(){
 
     if (t.id === "btnExport"){
       const d = $("#uiDate")?.value || state.uiDate || todayLocal();
-      exportDay(d);
+      exportDayZip(d);
       return;
     }
 
@@ -472,14 +780,173 @@ function bindEvents(){
       return;
     }
 
-    // visit actions
-    const done = t.closest("[data-done]");
-    if (done){
-      const visitId = done.getAttribute("data-done");
+    // checkbox ANO/NE
+    const boolBtn = t.closest("[data-bool]");
+    if (boolBtn){
+      const key = boolBtn.getAttribute("data-qkey");
+      const val = boolBtn.getAttribute("data-bool") === "true";
+
+      const visitId = state.route.visitId;
+      const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
+      if (!visit || !key) return;
+
+      const d = ensureDraft(visit);
+      d.answers[key] = val;
+      await saveDraft(d);
+      render();
+      return;
+    }
+
+    // photo add (question photo)
+    const phAdd = t.closest("[data-phadd]");
+    if (phAdd){
+      const key = phAdd.getAttribute("data-phadd");
+      const inp = document.querySelector(`input[data-phinp="${CSS.escape(key)}"]`);
+      const files = inp?.files ? [...inp.files] : [];
+      if (!files.length){ toast("Vyber fotky."); return; }
+
+      const qEl = t.closest('.q[data-qtype="photo"]');
+      const max = Number(qEl?.getAttribute("data-max") || "10");
+      const min = Number(qEl?.getAttribute("data-min") || "1");
+
+      const visitId = state.route.visitId;
+      const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
+      if (!visit) return;
+
+      const d = ensureDraft(visit);
+      const cur = d.answers[key];
+      const ids = (cur && typeof cur === "object" && Array.isArray(cur.photoIds)) ? cur.photoIds : [];
+      if (ids.length >= max){ toast(`Už máš max ${max} fotek.`); return; }
+
+      // omez počet přidaných fotek podle max
+      const remaining = Math.max(0, max - ids.length);
+      const toAdd = files.slice(0, remaining);
+
+      const newIds = await addPhotosToDB(toAdd, visitId);
+      d.answers[key] = { photoIds: [...ids, ...newIds] };
+      await saveDraft(d);
+      render();
+      return;
+    }
+
+    // photo remove (question photo)
+    const phRm = t.closest("[data-phrm]");
+    if (phRm){
+      const pid = phRm.getAttribute("data-phrm");
+      const key = phRm.getAttribute("data-qkey");
+
+      const visitId = state.route.visitId;
+      const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
+      if (!visit) return;
+
+      const d = ensureDraft(visit);
+      const cur = d.answers[key];
+      const ids = (cur && typeof cur === "object" && Array.isArray(cur.photoIds)) ? cur.photoIds : [];
+      d.answers[key] = { photoIds: ids.filter(x => x !== pid) };
+      await saveDraft(d);
+      render();
+      return;
+    }
+
+    // furniture gate handled in onchange
+
+    // furniture obs add
+    const addObs = t.closest("[data-addobs]");
+    if (addObs){
+      const visitId = state.route.visitId;
+      const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
+      if (!visit) return;
+      const d = ensureDraft(visit);
+
+      d.furnitureObservations = d.furnitureObservations || [];
+      d.furnitureObservations.push({
+        id: uuid(),
+        typeId: "ATYP",
+        atypLabel: "",
+        description: "",
+        quantity: 1,
+        photoIds: [],
+        classifiedTypeId: null
+      });
+
+      await saveDraft(d);
+      render();
+      return;
+    }
+
+    // furniture obs delete
+    const delObs = t.closest("[data-delobs]");
+    if (delObs){
+      const obsId = delObs.getAttribute("data-delobs");
+      const visitId = state.route.visitId;
+      const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
+      if (!visit) return;
+      const d = ensureDraft(visit);
+
+      d.furnitureObservations = (d.furnitureObservations || []).filter(o => o.id !== obsId);
+      await saveDraft(d);
+      render();
+      return;
+    }
+
+    // furniture obs add photos
+    const obsPhAdd = t.closest("[data-obsphadd]");
+    if (obsPhAdd){
+      const obsId = obsPhAdd.getAttribute("data-obsphadd");
+      const inp = document.querySelector(`input[data-obsphinp="${CSS.escape(obsId)}"]`);
+      const files = inp?.files ? [...inp.files] : [];
+      if (!files.length){ toast("Vyber fotky."); return; }
+
+      const visitId = state.route.visitId;
+      const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
+      if (!visit) return;
+      const d = ensureDraft(visit);
+
+      const obs = (d.furnitureObservations || []).find(o => o.id === obsId);
+      if (!obs) return;
+
+      const newIds = await addPhotosToDB(files, visitId);
+      obs.photoIds = [...(obs.photoIds || []), ...newIds];
+      await saveDraft(d);
+      render();
+      return;
+    }
+
+    // furniture obs remove photo
+    const obsPhRm = t.closest("[data-obsphrm]");
+    if (obsPhRm){
+      const pid = obsPhRm.getAttribute("data-obsphrm");
+      const obsId = obsPhRm.getAttribute("data-obsid");
+
+      const visitId = state.route.visitId;
+      const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
+      if (!visit) return;
+      const d = ensureDraft(visit);
+
+      const obs = (d.furnitureObservations || []).find(o => o.id === obsId);
+      if (!obs) return;
+
+      obs.photoIds = (obs.photoIds || []).filter(x => x !== pid);
+      await saveDraft(d);
+      render();
+      return;
+    }
+
+    // DONE / CANCEL
+    const doneBtn = t.closest("[data-done]");
+    if (doneBtn){
+      const visitId = doneBtn.getAttribute("data-done");
       const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
       if (!visit){ toast("Visit nenalezena."); return; }
 
       const d = ensureDraft(visit);
+
+      const errs = validateDraftBeforeDone(d);
+      if (errs.length){
+        toast(errs[0]);
+        return;
+      }
+
       d.status = "done";
       d.submittedAt = nowISO();
       await saveDraft(d);
@@ -489,9 +956,9 @@ function bindEvents(){
       return;
     }
 
-    const cancel = t.closest("[data-cancelvisit]");
-    if (cancel){
-      const visitId = cancel.getAttribute("data-cancelvisit");
+    const cancelBtn = t.closest("[data-cancelvisit]");
+    if (cancelBtn){
+      const visitId = cancelBtn.getAttribute("data-cancelvisit");
       const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
       if (!visit){ toast("Visit nenalezena."); return; }
 
@@ -505,24 +972,6 @@ function bindEvents(){
       render();
       return;
     }
-
-    // checkbox buttons
-    const boolBtn = t.closest("[data-bool]");
-    if (boolBtn){
-      const q = t.closest(".q");
-      const key = q?.getAttribute("data-qkey");
-      const val = boolBtn.getAttribute("data-bool") === "true";
-
-      const visitId = state.route.visitId;
-      const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
-      if (!visit || !key) return;
-
-      const d = ensureDraft(visit);
-      d.answers[key] = val;
-      await saveDraft(d);
-      render();
-      return;
-    }
   };
 
   document.onchange = async (e) => {
@@ -530,6 +979,20 @@ function bindEvents(){
 
     if (t.id === "uiDate"){
       state.uiDate = t.value || todayLocal();
+      render();
+      return;
+    }
+
+    // gate select
+    if (t.matches('select[data-gate="1"]')){
+      const key = t.getAttribute("data-qkey");
+      const visitId = state.route.visitId;
+      const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
+      if (!visit || !key) return;
+
+      const d = ensureDraft(visit);
+      d.answers[key] = t.value || "";
+      await saveDraft(d);
       render();
       return;
     }
@@ -562,8 +1025,21 @@ function bindEvents(){
       await saveDraft(d);
       return;
     }
-    if (type === "furniture_trigger" && t.matches("select[data-gate]")){
-      d.answers[key] = t.value || "";
+
+    // obs fields
+    if (t.matches("[data-obsfield]")){
+      const obsId = t.getAttribute("data-obsid");
+      const field = t.getAttribute("data-obsfield");
+
+      const obs = (d.furnitureObservations||[]).find(o => o.id === obsId);
+      if (!obs) return;
+
+      if (field === "quantity"){
+        const n = Number(t.value);
+        obs.quantity = Number.isFinite(n) ? n : 1;
+      } else {
+        obs[field] = t.value ?? "";
+      }
       await saveDraft(d);
       return;
     }
@@ -577,12 +1053,10 @@ async function boot(){
   await loadPack();
   await loadDrafts();
 
-  // SW můžeš mít, ale když ladíš, klidně ho vypni — teď nechávám zapnuto
   if ("serviceWorker" in navigator){
     navigator.serviceWorker.register("./sw.js").catch(() => {});
   }
 
   render();
 }
-
 boot();
