@@ -1,10 +1,25 @@
 {
   "name": "Merch Visits – Mobile Logger",
   "short_name": "Mobile Logger",
-  "start_url": "./",
+  "start_url": "./?source=pwa",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#0b0f18",
-  "theme_color": "#0b0f18",
-  "icons": []
+  "orientation": "portrait",
+  "background_color": "#eef1f5",
+  "theme_color": "#eef1f5",
+  "description": "Mobilní logger návštěv pro merchandising (offline-first, export ZIP).",
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
 }
