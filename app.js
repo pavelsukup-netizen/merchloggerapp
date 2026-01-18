@@ -803,6 +803,91 @@ function bindEvents(){
       render();
       return;
     }
+    // --- furniture obs add ---
+    const addObs = t.closest("[data-addobs]");
+    if (addObs){
+      const visitId = state.route.visitId;
+      const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
+      if (!visit) return;
+      const d = ensureDraft(visit);
+
+      d.furnitureObservations = d.furnitureObservations || [];
+      d.furnitureObservations.push({
+        id: uuid(),
+        typeId: "ATYP",
+        atypLabel: "",
+        description: "",
+        quantity: 1,
+        photoIds: [],
+        classifiedTypeId: null
+      });
+
+      await saveDraft(d);
+      render();
+      return;
+    }
+
+    // --- furniture obs delete ---
+    const delObs = t.closest("[data-delobs]");
+    if (delObs){
+      const obsId = delObs.getAttribute("data-delobs");
+      const visitId = state.route.visitId;
+      const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
+      if (!visit) return;
+      const d = ensureDraft(visit);
+
+      d.furnitureObservations = (d.furnitureObservations || []).filter(o => o.id !== obsId);
+      await saveDraft(d);
+      render();
+      return;
+    }
+
+    // --- furniture obs add photos ---
+    const obsPhAdd = t.closest("[data-obsphadd]");
+    if (obsPhAdd){
+      const obsId = obsPhAdd.getAttribute("data-obsphadd");
+      const inp = document.querySelector(`input[data-obsphinp="${CSS.escape(obsId)}"]`);
+      const files = inp?.files ? [...inp.files] : [];
+      if (!files.length){ toast("Vyber fotky k atypu."); return; }
+
+      const visitId = state.route.visitId;
+      const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
+      if (!visit) return;
+      const d = ensureDraft(visit);
+
+      const obs = (d.furnitureObservations || []).find(o => o.id === obsId);
+      if (!obs) { toast("Záznam atypu nenalezen."); return; }
+
+      const newIds = await addPhotosToDB(files, visitId);
+      obs.photoIds = [...(obs.photoIds || []), ...newIds];
+
+      // reset inputu, aby šlo vybrat stejnou fotku znovu (Android)
+      if (inp) inp.value = "";
+
+      await saveDraft(d);
+      render();
+      return;
+    }
+
+    // --- furniture obs remove photo ---
+    const obsPhRm = t.closest("[data-obsphrm]");
+    if (obsPhRm){
+      const pid = obsPhRm.getAttribute("data-obsphrm");
+      const obsId = obsPhRm.getAttribute("data-obsid");
+
+      const visitId = state.route.visitId;
+      const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
+      if (!visit) return;
+      const d = ensureDraft(visit);
+
+      const obs = (d.furnitureObservations || []).find(o => o.id === obsId);
+      if (!obs) return;
+
+      obs.photoIds = (obs.photoIds || []).filter(x => x !== pid);
+      await saveDraft(d);
+      render();
+      return;
+    }
 
     const doneBtn = t.closest("[data-done]");
     if (doneBtn){
@@ -882,6 +967,28 @@ function bindEvents(){
       return;
     }
     if (type === "select"){ d.answers[key] = t.value || ""; await saveDraft(d); return; }
+        // --- furniture obs fields ---
+    if (t.matches("[data-obsfield]")){
+      const visitId = state.route.visitId;
+      const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
+      if (!visit) return;
+      const d = ensureDraft(visit);
+
+      const obsId = t.getAttribute("data-obsid");
+      const field = t.getAttribute("data-obsfield");
+      const obs = (d.furnitureObservations||[]).find(o => o.id === obsId);
+      if (!obs) return;
+
+      if (field === "quantity"){
+        const n = Number(t.value);
+        obs.quantity = (Number.isFinite(n) && n >= 1) ? n : 1;
+      } else {
+        obs[field] = t.value ?? "";
+      }
+      await saveDraft(d);
+      return;
+    }
+
   };
 }
 
