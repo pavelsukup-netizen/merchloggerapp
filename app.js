@@ -148,27 +148,107 @@ async function saveDraft(d){
 }
 
 /* ----------------- photos (FIX: store as Blob, not File) ----------------- */
+const PHOTO_COMPRESS = {
+  enabled: true,
+  maxSide: 1600,      // delší strana po zmenšení (doporučuju 1280–1920)
+  quality: 0.75,      // JPEG kvalita 0–1 (0.7–0.8 je sweet spot)
+  mime: "image/jpeg"  // ukládat jako JPEG (menší než PNG)
+};
+
+// z File/Blob udělá zmenšený + zkomprimovaný Blob
+async function compressImageFile(file, opts = PHOTO_COMPRESS){
+  if (!opts.enabled) return { blob: file, mime: file.type || "image/jpeg" };
+
+  // Neobrázkové soubory přeskoč (kdyby něco)
+  if (!file.type || !file.type.startsWith("image/")) {
+    return { blob: file, mime: file.type || "application/octet-stream" };
+  }
+
+  // createImageBitmap je rychlejší; fallback na <img> je níž
+  let bitmap = null;
+  try {
+    // některé prohlížeče respektují orientaci automaticky
+    bitmap = await createImageBitmap(file);
+  } catch {
+    bitmap = null;
+  }
+
+  // fallback přes img
+  if (!bitmap) {
+    const dataUrl = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+
+    bitmap = await new Promise((res, rej) => {
+      const img = new Image();
+      img.onload = () => res(img);
+      img.onerror = rej;
+      img.src = dataUrl;
+    });
+  }
+
+  const w0 = bitmap.width;
+  const h0 = bitmap.height;
+
+  // spočítej scale, ať delší strana je maxSide
+  const maxSide = opts.maxSide || 1600;
+  const scale = Math.min(1, maxSide / Math.max(w0, h0));
+  const w = Math.max(1, Math.round(w0 * scale));
+  const h = Math.max(1, Math.round(h0 * scale));
+
+  // canvas (OffscreenCanvas když jde)
+  const canvas = (typeof OffscreenCanvas !== "undefined")
+    ? new OffscreenCanvas(w, h)
+    : Object.assign(document.createElement("canvas"), { width: w, height: h });
+
+  const ctx = canvas.getContext("2d", { alpha: false });
+  ctx.drawImage(bitmap, 0, 0, w, h);
+
+  const mime = opts.mime || "image/jpeg";
+  const quality = (typeof opts.quality === "number") ? opts.quality : 0.75;
+
+  // OffscreenCanvas má convertToBlob, normal canvas má toBlob
+  let outBlob;
+  if (canvas.convertToBlob) {
+    outBlob = await canvas.convertToBlob({ type: mime, quality });
+  } else {
+    outBlob = await new Promise(res => canvas.toBlob(res, mime, quality));
+  }
+
+  // Pokud komprese náhodou selže, vrať původní
+  if (!outBlob) return { blob: file, mime: file.type || "image/jpeg" };
+
+  return { blob: outBlob, mime };
+}
+
 async function addPhotosToDB(files, visitId){
   const photoIds = [];
+
   for (const f of files){
     const photoId = uuid();
-    const mime = f.type || "image/jpeg";
 
-    // FIX: convert File -> stable Blob
-    const buf = await f.arrayBuffer();
-    const blob = new Blob([buf], { type: mime });
+    // ✅ NOVÉ: komprese + resize
+    const { blob, mime } = await compressImageFile(f);
 
     await IDB.set(IDB.STORES.photos, photoId, {
       blob,
       mime,
       takenAt: nowISO(),
-      visitId
+      visitId,
+      originalName: f.name || null,
+      originalSize: f.size || null,
+      storedSize: blob.size || null
     });
 
     photoIds.push(photoId);
   }
+
   return photoIds;
 }
+
 
 async function getPhotoRec(photoId){
   return await IDB.get(IDB.STORES.photos, photoId);
