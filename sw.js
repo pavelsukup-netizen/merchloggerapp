@@ -1,5 +1,5 @@
 // sw.js — cache + offline. BUMP VER při každé změně souborů.
-const CACHE = "mv_mobile_logger_v17";
+const CACHE = "mv_mobile_logger_v18";
 
 const ASSETS = [
   "./",
