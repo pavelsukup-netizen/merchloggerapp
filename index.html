@@ -36,14 +36,18 @@
         <div class="topTitle">Merch Visits</div>
 
         <div class="topActions">
-          <span class="pill">Mobile Logger</span>
+  <span class="pill">Mobile Logger</span>
 
-          <!-- Klikatelnej kalendář: input je uvnitř ikonky -->
-          <label class="iconBtn" title="Vybrat den">
-            📅
-            <input id="dayPicker" type="date" />
-          </label>
-        </div>
+  <!-- datum jako bublina -->
+  <span class="pill" id="datePill">—</span>
+
+  <!-- jen ikonka, input je neviditelnej overlay -->
+  <label class="iconBtn" title="Vybrat den">
+    📅
+    <input id="dayPicker" type="date" aria-label="Vybrat den" />
+  </label>
+</div>
+
       </header>
 
       <main id="app" class="app"></main>
