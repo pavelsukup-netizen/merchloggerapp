@@ -147,33 +147,23 @@ async function saveDraft(d){
   state.drafts.set(d.visitId, d);
 }
 
-/* ----------------- photos (FIX: store as Blob, not File) ----------------- */
+/* ----------------- photos (store as Blob, not File) ----------------- */
 const PHOTO_COMPRESS = {
   enabled: true,
-  maxSide: 1600,      // delší strana po zmenšení (doporučuju 1280–1920)
-  quality: 0.75,      // JPEG kvalita 0–1 (0.7–0.8 je sweet spot)
-  mime: "image/jpeg"  // ukládat jako JPEG (menší než PNG)
+  maxSide: 1600,
+  quality: 0.75,
+  mime: "image/jpeg"
 };
 
-// z File/Blob udělá zmenšený + zkomprimovaný Blob
 async function compressImageFile(file, opts = PHOTO_COMPRESS){
   if (!opts.enabled) return { blob: file, mime: file.type || "image/jpeg" };
-
-  // Neobrázkové soubory přeskoč (kdyby něco)
   if (!file.type || !file.type.startsWith("image/")) {
     return { blob: file, mime: file.type || "application/octet-stream" };
   }
 
-  // createImageBitmap je rychlejší; fallback na <img> je níž
   let bitmap = null;
-  try {
-    // některé prohlížeče respektují orientaci automaticky
-    bitmap = await createImageBitmap(file);
-  } catch {
-    bitmap = null;
-  }
+  try { bitmap = await createImageBitmap(file); } catch { bitmap = null; }
 
-  // fallback přes img
   if (!bitmap) {
     const dataUrl = await new Promise((res, rej) => {
       const r = new FileReader();
@@ -193,13 +183,11 @@ async function compressImageFile(file, opts = PHOTO_COMPRESS){
   const w0 = bitmap.width;
   const h0 = bitmap.height;
 
-  // spočítej scale, ať delší strana je maxSide
   const maxSide = opts.maxSide || 1600;
   const scale = Math.min(1, maxSide / Math.max(w0, h0));
   const w = Math.max(1, Math.round(w0 * scale));
   const h = Math.max(1, Math.round(h0 * scale));
 
-  // canvas (OffscreenCanvas když jde)
   const canvas = (typeof OffscreenCanvas !== "undefined")
     ? new OffscreenCanvas(w, h)
     : Object.assign(document.createElement("canvas"), { width: w, height: h });
@@ -210,7 +198,6 @@ async function compressImageFile(file, opts = PHOTO_COMPRESS){
   const mime = opts.mime || "image/jpeg";
   const quality = (typeof opts.quality === "number") ? opts.quality : 0.75;
 
-  // OffscreenCanvas má convertToBlob, normal canvas má toBlob
   let outBlob;
   if (canvas.convertToBlob) {
     outBlob = await canvas.convertToBlob({ type: mime, quality });
@@ -218,19 +205,14 @@ async function compressImageFile(file, opts = PHOTO_COMPRESS){
     outBlob = await new Promise(res => canvas.toBlob(res, mime, quality));
   }
 
-  // Pokud komprese náhodou selže, vrať původní
   if (!outBlob) return { blob: file, mime: file.type || "image/jpeg" };
-
   return { blob: outBlob, mime };
 }
 
 async function addPhotosToDB(files, visitId){
   const photoIds = [];
-
   for (const f of files){
     const photoId = uuid();
-
-    // ✅ NOVÉ: komprese + resize
     const { blob, mime } = await compressImageFile(f);
 
     await IDB.set(IDB.STORES.photos, photoId, {
@@ -245,10 +227,8 @@ async function addPhotosToDB(files, visitId){
 
     photoIds.push(photoId);
   }
-
   return photoIds;
 }
-
 
 async function getPhotoRec(photoId){
   return await IDB.get(IDB.STORES.photos, photoId);
@@ -278,11 +258,9 @@ function normalizeCond(cond){
   let op = cond?.op;
   let value = cond?.value;
 
-  // backward compat: { key, equals: ... }
   if (!op && cond && cond.equals !== undefined) { op = "eq"; value = cond.equals; }
   if (!op && cond && cond.notEquals !== undefined) { op = "neq"; value = cond.notEquals; }
 
-  // map "ANO/NE" -> boolean (pro checkboxy)
   if (value === "ANO") value = true;
   if (value === "NE") value = false;
 
@@ -308,31 +286,32 @@ function evalCond(draft, condRaw){
       if (v && typeof v === "object" && Array.isArray(v.photoIds)) return v.photoIds.length === 0;
       return !v;
     default:
-      return true; // neznámá operace -> neblokuj
+      return true;
   }
 }
 
 function isQuestionActive(draft, q){
   const d = q?.dependsOn;
   if (!d) return true;
-
-  // single condition
   if (d.key) return evalCond(draft, d);
-
-  // AND
   if (Array.isArray(d.all)) return d.all.every(c => evalCond(draft, c));
-
-  // OR
   if (Array.isArray(d.any)) return d.any.some(c => evalCond(draft, c));
-
   return true;
 }
 
+/* ----------------- UI helpers (topbar date) ----------------- */
+function syncTopbarDate(date){
+  const dp = $("#dayPicker");
+  if (dp && dp.value !== date) dp.value = date;
+}
 
 /* ----------------- render ----------------- */
 function render(){
   const root = rootEl();
   const date = state.uiDate || todayLocal();
+
+  // keep topbar dayPicker synced (exists in index.html topbar)
+  syncTopbarDate(date);
 
   if (state.route.name === "visit"){
     const visitId = state.route.visitId;
@@ -369,39 +348,57 @@ function render(){
     return;
   }
 
-  // HOME
+  // HOME (clean layout)
   root.innerHTML = `
     <div class="card">
-      <h2>Job Pack</h2>
+      <div class="cardHeader">
+        <div>
+          <h2>Job Pack</h2>
+          <div class="small">Den: <b>${esc(date)}</b></div>
+        </div>
+        <div class="cardActions">
+          ${state.pack ? `<span class="pill ok">Pack ✓</span>` : `<span class="pill bad">Pack: ne</span>`}
+        </div>
+      </div>
+
       <div class="row">
-        ${state.pack ? `<span class="pill ok">Pack ✓</span>` : `<span class="pill bad">Pack: ne</span>`}
-        ${state.pack ? `<span class="pill">packId: ${esc(state.pack.packId)}</span>` : ``}
-        ${state.pack ? `<span class="pill">merch: ${esc(state.pack.merch?.id)}</span>` : ``}
+        ${state.pack ? `<span class="pill">merch: <b>${esc(state.pack.merch?.id)}</b></span>` : ``}
+
+        ${state.pack ? `
+          <details class="adv">
+            <summary class="ghostLink">Advanced</summary>
+            <div class="advBox">
+              <div class="mono">packId: ${esc(state.pack.packId)}</div>
+              <div class="mono">createdAt: ${esc(state.pack.createdAt || "")}</div>
+            </div>
+          </details>
+        ` : ``}
       </div>
 
       <div class="hr"></div>
 
-      <div class="row">
-        <input id="filePack" class="inp" type="file" accept="application/json" />
-        <button class="btn" id="btnImport">Import pack</button>
+      <div class="toolbar">
+        <label class="btn fileBtn">
+          <input id="filePack" type="file" accept="application/json" />
+          Vybrat jobpack
+        </label>
+
+        <button class="btn ok" id="btnImport">Import</button>
+        <button class="btn ok" id="btnExport" ${state.pack ? "" : "disabled"}>Export denního ZIP</button>
       </div>
 
-      <div class="hr"></div>
-
-      <div class="grid two">
-        <div>
-          <label>Den</label>
-          <input id="uiDate" class="inp" type="date" value="${esc(date)}"/>
-        </div>
-        <div>
-          <label>Export</label>
-          <button class="btn ok" id="btnExport" ${state.pack ? "" : "disabled"}>Export denního ZIP</button>
-        </div>
-      </div>
+      <p class="small" style="margin-top:10px">
+        Tip: Datum vybereš nahoře přes 📅 v liště.
+      </p>
     </div>
 
     <div class="card">
-      <h2>Návštěvy (${esc(date)})</h2>
+      <div class="cardHeader">
+        <div>
+          <h2>Návštěvy</h2>
+          <div class="small">${esc(date)}</div>
+        </div>
+      </div>
       ${renderVisits(date)}
     </div>
   `;
@@ -447,7 +444,6 @@ function renderVisits(date){
 
 function renderTemplateForm(tpl, draft){
   if (!tpl) return `<div class="card"><p class="small">Template chybí.</p></div>`;
-
   const blocks = tpl.blocks || [];
   return blocks.map(b => {
     const qs = b.questions || [];
@@ -485,7 +481,6 @@ function renderPhotoQuestion(q, draft){
   const cur = draft.answers?.[key];
   const ids = (cur && typeof cur === "object" && Array.isArray(cur.photoIds)) ? cur.photoIds : [];
 
-  // FIX: NO capture => nabídne kamera i galerie
   return `
     <div class="q" data-qtype="photo" data-qkey="${esc(key)}" data-min="${esc(min)}" data-max="${esc(max)}">
       <div class="ql">${esc(q.label)} ${q.required ? `<span class="req">*</span>` : ""}</div>
@@ -512,8 +507,6 @@ function renderPhotoQuestion(q, draft){
   `;
 }
 
-// furniture_trigger renderer nechávám stejný jako tvoje poslední verze (fungoval),
-// jen u foto inputu taky odstraním capture:
 function renderFurnitureTrigger(q, draft){
   const key = q.key;
   const gate = (typeof draft.answers?.[key] === "string") ? draft.answers[key] : "";
@@ -691,7 +684,7 @@ function validateDraftBeforeDone(draft){
   const qs = collectQuestions(tpl);
 
   for (const q of qs){
-      if (!isQuestionActive(draft, q)) continue;
+    if (!isQuestionActive(draft, q)) continue;
     const key = q.key;
     const v = draft.answers?.[key];
 
@@ -848,7 +841,11 @@ function bindEvents(){
     const t = e.target;
 
     const nav = t.closest("[data-nav]");
-    if (nav){ state.route = { name: "home", visitId: null }; render(); return; }
+    if (nav){
+      state.route = { name: "home", visitId: null };
+      render();
+      return;
+    }
 
     if (t.id === "btnImport"){
       const f = $("#filePack")?.files?.[0];
@@ -869,7 +866,7 @@ function bindEvents(){
     }
 
     if (t.id === "btnExport"){
-      const d = $("#uiDate")?.value || state.uiDate || todayLocal();
+      const d = $("#dayPicker")?.value || state.uiDate || todayLocal();
       exportDayZip(d);
       return;
     }
@@ -942,7 +939,7 @@ function bindEvents(){
       render();
       return;
     }
-    // --- furniture obs add ---
+
     const addObs = t.closest("[data-addobs]");
     if (addObs){
       const visitId = state.route.visitId;
@@ -966,7 +963,6 @@ function bindEvents(){
       return;
     }
 
-    // --- furniture obs delete ---
     const delObs = t.closest("[data-delobs]");
     if (delObs){
       const obsId = delObs.getAttribute("data-delobs");
@@ -981,7 +977,6 @@ function bindEvents(){
       return;
     }
 
-    // --- furniture obs add photos ---
     const obsPhAdd = t.closest("[data-obsphadd]");
     if (obsPhAdd){
       const obsId = obsPhAdd.getAttribute("data-obsphadd");
@@ -1000,7 +995,6 @@ function bindEvents(){
       const newIds = await addPhotosToDB(files, visitId);
       obs.photoIds = [...(obs.photoIds || []), ...newIds];
 
-      // reset inputu, aby šlo vybrat stejnou fotku znovu (Android)
       if (inp) inp.value = "";
 
       await saveDraft(d);
@@ -1008,7 +1002,6 @@ function bindEvents(){
       return;
     }
 
-    // --- furniture obs remove photo ---
     const obsPhRm = t.closest("[data-obsphrm]");
     if (obsPhRm){
       const pid = obsPhRm.getAttribute("data-obsphrm");
@@ -1068,7 +1061,8 @@ function bindEvents(){
   document.onchange = async (e) => {
     const t = e.target;
 
-    if (t.id === "uiDate"){
+    // NEW: topbar date picker
+    if (t.id === "dayPicker"){
       state.uiDate = t.value || todayLocal();
       render();
       return;
@@ -1106,13 +1100,8 @@ function bindEvents(){
       return;
     }
     if (type === "select"){ d.answers[key] = t.value || ""; await saveDraft(d); return; }
-        // --- furniture obs fields ---
-    if (t.matches("[data-obsfield]")){
-      const visitId = state.route.visitId;
-      const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
-      if (!visit) return;
-      const d = ensureDraft(visit);
 
+    if (t.matches("[data-obsfield]")){
       const obsId = t.getAttribute("data-obsid");
       const field = t.getAttribute("data-obsfield");
       const obs = (d.furnitureObservations||[]).find(o => o.id === obsId);
@@ -1127,7 +1116,6 @@ function bindEvents(){
       await saveDraft(d);
       return;
     }
-
   };
 }
 
