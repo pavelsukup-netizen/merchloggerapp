@@ -66,7 +66,6 @@ function validateJobPack(pack){
     if (v.templateId && !tplSet.has(v.templateId)) errors.push(`Visit ${v.visitId} odkazuje na neznámý templateId: ${v.templateId}`);
   }
 
-  // duplicitní keys napříč template
   for (const t of (pack.templates||[])){
     const keys = new Set();
     const dups = new Set();
@@ -147,7 +146,7 @@ async function saveDraft(d){
   state.drafts.set(d.visitId, d);
 }
 
-/* ----------------- photos (store as Blob, not File) ----------------- */
+/* ----------------- photos ----------------- */
 const PHOTO_COMPRESS = {
   enabled: true,
   maxSide: 1600,
@@ -299,7 +298,51 @@ function isQuestionActive(draft, q){
   return true;
 }
 
-/* ----------------- UI helpers (topbar date) ----------------- */
+/* ----------------- SW version badge ----------------- */
+async function updateSWBadge(){
+  const el = $("#swVer");
+  if (!el) return;
+
+  if (!("serviceWorker" in navigator)){
+    el.textContent = "SW: —";
+    return;
+  }
+
+  const reg = await navigator.serviceWorker.getRegistration();
+  const sw = reg?.active || reg?.waiting || reg?.installing;
+  if (!sw){
+    el.textContent = "SW: —";
+    return;
+  }
+
+  // zkus získat verzi přes message (nejspolehlivější)
+  const version = await new Promise((res) => {
+    let done = false;
+    const timer = setTimeout(() => { if(!done) res(null); }, 900);
+
+    try {
+      const ch = new MessageChannel();
+      ch.port1.onmessage = (ev) => {
+        done = true;
+        clearTimeout(timer);
+        res(ev.data?.version || null);
+      };
+      sw.postMessage({ type: "GET_VERSION" }, [ch.port2]);
+    } catch {
+      clearTimeout(timer);
+      res(null);
+    }
+  });
+
+  if (version){
+    el.textContent = `SW: ${version}`;
+  } else {
+    // fallback (když sw.js ještě neumí odpovědět)
+    el.textContent = `SW: ${sw.state || "—"}`;
+  }
+}
+
+/* ----------------- topbar date sync ----------------- */
 function syncTopbarDate(date){
   const dp = $("#dayPicker");
   if (dp && dp.value !== date) dp.value = date;
@@ -310,14 +353,13 @@ function render(){
   const root = rootEl();
   const date = state.uiDate || todayLocal();
 
-  // keep topbar dayPicker synced (exists in index.html topbar)
   syncTopbarDate(date);
 
   if (state.route.name === "visit"){
     const visitId = state.route.visitId;
     const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
     if (!visit){
-      root.innerHTML = `<div class="card"><h2>Visit nenalezena</h2><button class="btn" data-nav="home">Domů</button></div>`;
+      root.innerHTML = `<div class="card"><h2>Visit nenalezena</h2><button class="btn" data-nav="home">Zpět</button></div>`;
       bindEvents();
       return;
     }
@@ -333,7 +375,7 @@ function render(){
           <span class="pill">${esc(tpl?.name || visit.templateId)}</span>
           <span class="pill warn">${esc(draft.status)}</span>
           <span class="spacer"></span>
-          <button class="btn ghost" data-nav="home">Domů</button>
+          <button class="btn ghost" data-nav="home">Zpět</button>
           <button class="btn bad" data-cancelvisit="${esc(visit.visitId)}">Zrušit</button>
           <button class="btn ok" data-done="${esc(visit.visitId)}">Dokončit</button>
         </div>
@@ -348,7 +390,7 @@ function render(){
     return;
   }
 
-  // HOME (clean layout)
+  // HOME (bez Advanced)
   root.innerHTML = `
     <div class="card">
       <div class="cardHeader">
@@ -363,16 +405,7 @@ function render(){
 
       <div class="row">
         ${state.pack ? `<span class="pill">merch: <b>${esc(state.pack.merch?.id)}</b></span>` : ``}
-
-        ${state.pack ? `
-          <details class="adv">
-            <summary class="ghostLink">Advanced</summary>
-            <div class="advBox">
-              <div class="mono">packId: ${esc(state.pack.packId)}</div>
-              <div class="mono">createdAt: ${esc(state.pack.createdAt || "")}</div>
-            </div>
-          </details>
-        ` : ``}
+        ${state.pack ? `<span class="pill">packId: <b class="mono">${esc(state.pack.packId)}</b></span>` : ``}
       </div>
 
       <div class="hr"></div>
@@ -386,10 +419,6 @@ function render(){
         <button class="btn ok" id="btnImport">Import</button>
         <button class="btn ok" id="btnExport" ${state.pack ? "" : "disabled"}>Export denního ZIP</button>
       </div>
-
-      <p class="small" style="margin-top:10px">
-        Tip: Datum vybereš nahoře přes 📅 v liště.
-      </p>
     </div>
 
     <div class="card">
@@ -444,6 +473,7 @@ function renderVisits(date){
 
 function renderTemplateForm(tpl, draft){
   if (!tpl) return `<div class="card"><p class="small">Template chybí.</p></div>`;
+
   const blocks = tpl.blocks || [];
   return blocks.map(b => {
     const qs = b.questions || [];
@@ -675,7 +705,7 @@ async function hydratePhotoThumbs(){
   }
 }
 
-/* ----------------- hard validation (DONE) ----------------- */
+/* ----------------- hard validation ----------------- */
 function validateDraftBeforeDone(draft){
   const tpl = tplById(draft.templateId);
   if (!tpl) return ["Chybí template v packu (fail-fast)."];
@@ -1061,7 +1091,6 @@ function bindEvents(){
   document.onchange = async (e) => {
     const t = e.target;
 
-    // NEW: topbar date picker
     if (t.id === "dayPicker"){
       state.uiDate = t.value || todayLocal();
       render();
@@ -1127,8 +1156,19 @@ async function boot(){
   await loadDrafts();
 
   if ("serviceWorker" in navigator){
-    navigator.serviceWorker.register("./sw.js").catch(() => {});
+    try {
+      await navigator.serviceWorker.register("./sw.js");
+    } catch {}
   }
+
+  // refresh badge on controller changes (když se SW aktualizuje)
+  if ("serviceWorker" in navigator){
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      setTimeout(() => updateSWBadge().catch(()=>{}), 300);
+    });
+  }
+
+  await updateSWBadge().catch(()=>{});
 
   render();
 }
