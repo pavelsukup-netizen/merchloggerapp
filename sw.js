@@ -1,5 +1,6 @@
+const SW_VERSION = "2026-01-22";
 // sw.js — cache + offline. BUMP VER při každé změně souborů.
-const CACHE = "mv_mobile_logger_v21";
+const CACHE = "mv_mobile_logger_v22";
 
 const ASSETS = [
   "./",
@@ -61,4 +62,15 @@ self.addEventListener("fetch", (event) => {
       return new Response("Offline", { status: 503 });
     }
   })());
+self.addEventListener("message", (event) => {
+  if (event.data?.type === "GET_VERSION") {
+    // když přijde MessageChannel port, odpověz tam
+    if (event.ports && event.ports[0]) {
+      event.ports[0].postMessage({ version: SW_VERSION });
+      return;
+    }
+    // fallback
+    event.source?.postMessage?.({ version: SW_VERSION });
+  }
 });
+
