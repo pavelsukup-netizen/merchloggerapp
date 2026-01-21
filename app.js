@@ -346,7 +346,11 @@ async function updateSWBadge(){
 function syncTopbarDate(date){
   const dp = $("#dayPicker");
   if (dp && dp.value !== date) dp.value = date;
+
+  const pill = $("#datePill");
+  if (pill) pill.textContent = (date || "—").split("-").reverse().join(". ");
 }
+
 
 /* ----------------- render ----------------- */
 function render(){
