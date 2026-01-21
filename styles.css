@@ -41,11 +41,9 @@ a{color:var(--accent)}
   border-right:1px solid var(--line);
   background:rgba(238,241,245,.92);
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
   display:flex;
   flex-direction:column;
   gap:14px;
-  z-index:4; /* layering safety */
 }
 
 .content{min-width:0;}
@@ -53,50 +51,26 @@ a{color:var(--accent)}
 .topbar{
   position:sticky;
   top:0;
-  z-index:5; /* layering safety */
+  z-index:10;
   display:flex;
   align-items:center;
   justify-content:space-between;
+  gap:10px;
   padding:12px 14px;
   border-bottom:1px solid var(--line);
   background:rgba(238,241,245,.85);
   backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
 }
 
 .topTitle{font-weight:850; letter-spacing:.2px;}
-.topPills{display:flex; gap:8px; flex-wrap:wrap}
 
-/* NEW: topbar actions container (pill + icons etc.) */
+/* NEW: topbar right actions (pill + date pill + calendar icon) */
 .topActions{
   display:flex;
   align-items:center;
   gap:10px;
-  flex-wrap:wrap;
-}
-
-/* NEW: icon button (for calendar, etc.) */
-.iconBtn{
-  width:44px;
-  height:44px;
-  display:grid;
-  place-items:center;
-  border-radius:14px;
-  border:1px solid var(--line);
-  background:#fff;
-  box-shadow: 0 6px 14px rgba(15,23,42,.06);
-  cursor:pointer;
-  user-select:none;
-}
-.iconBtn:active{transform:translateY(1px)}
-
-/* NEW: hide date input but keep it functional */
-.dateHidden{
-  position:absolute;
-  left:-9999px;
-  width:1px;
-  height:1px;
-  opacity:0;
+  flex-wrap:nowrap;
+  min-width:0;
 }
 
 .sbBrand{
@@ -199,35 +173,6 @@ a{color:var(--accent)}
   margin:12px 0;
 }
 
-/* NEW: card header layout (title left, actions right) */
-.cardHeader{
-  display:flex;
-  align-items:flex-start;
-  justify-content:space-between;
-  gap:12px;
-  margin-bottom:12px;
-}
-.cardHeader h2{margin:0;}
-.cardActions{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  flex-wrap:wrap;
-}
-
-/* NEW: toolbar row for compact actions */
-.toolbar{
-  display:flex;
-  gap:10px;
-  flex-wrap:wrap;
-  align-items:center;
-}
-.toolbar .btn{
-  padding:12px 14px;
-  min-height:46px;
-  border-radius:14px;
-}
-
 /* ----------------- Buttons ----------------- */
 .btn{
   border:1px solid var(--line);
@@ -255,38 +200,6 @@ a{color:var(--accent)}
 .btn.ghost{
   background:transparent;
   box-shadow:none;
-}
-
-/* NEW: focus ring (better UX + testing) */
-.btn:focus-visible, .sbBtn:focus-visible, .inp:focus-visible, select:focus-visible, textarea:focus-visible{
-  outline: 3px solid rgba(37,99,235,.25);
-  outline-offset: 2px;
-}
-
-/* NEW: fallback styling for forgotten buttons without .btn/.sbBtn */
-button:not(.btn):not(.sbBtn){
-  border:1px solid var(--line);
-  background:#fff;
-  color:var(--txt);
-  padding:14px 16px;
-  border-radius:16px;
-  font-weight:850;
-  cursor:pointer;
-  min-height:52px;
-  box-shadow: 0 6px 14px rgba(15,23,42,.06);
-}
-button:not(.btn):not(.sbBtn):active{transform:translateY(1px)}
-
-/* NEW: file input as a button (wrap input inside label.btn.fileBtn) */
-.fileBtn{
-  position:relative;
-  overflow:hidden;
-}
-.fileBtn input[type="file"]{
-  position:absolute;
-  inset:0;
-  opacity:0;
-  cursor:pointer;
 }
 
 /* ----------------- Inputs ----------------- */
@@ -326,6 +239,7 @@ label{
   color:var(--muted);
   font-size:13px;
   font-weight:750;
+  min-width:0;
 }
 
 .pill.ok{
@@ -342,6 +256,39 @@ label{
   color:#8b102a;
   border-color:rgba(225,29,72,.30);
   background:rgba(225,29,72,.10);
+}
+
+/* NEW: date pill formatting */
+#datePill{
+  white-space:nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ----------------- Icon button (calendar) ----------------- */
+.iconBtn{
+  width:44px;
+  height:44px;
+  display:grid;
+  place-items:center;
+  border-radius:14px;
+  border:1px solid var(--line);
+  background:#fff;
+  box-shadow: 0 6px 14px rgba(15,23,42,.06);
+  cursor:pointer;
+  user-select:none;
+  position:relative; /* input overlay */
+  flex:0 0 auto;
+}
+.iconBtn:active{transform:translateY(1px)}
+
+/* Input je neviditelnej overlay => nic neroztahuje layout, ale otevře picker */
+.iconBtn input[type="date"]{
+  position:absolute;
+  inset:0;
+  opacity:0;
+  cursor:pointer;
+  -webkit-appearance:none;
+  appearance:none;
 }
 
 /* ----------------- Lists ----------------- */
@@ -415,52 +362,19 @@ label{
 }
 .ph button:active{transform:translateY(1px)}
 
-/* ----------------- Advanced details (optional) ----------------- */
-.adv summary{
-  list-style:none;
-  cursor:pointer;
-}
-.adv summary::-webkit-details-marker{display:none}
-
-.ghostLink{
-  color:var(--accent);
-  font-weight:800;
-  padding:8px 10px;
-  border-radius:12px;
-  border:1px solid transparent;
-  display:inline-flex;
-  align-items:center;
-  gap:6px;
-}
-.ghostLink:hover{
-  border-color:var(--line);
-  background:rgba(15,23,42,.02);
-}
-
-.advBox{
-  margin-top:10px;
-  padding:12px;
-  border-radius:14px;
-  border:1px solid var(--line);
-  background:rgba(15,23,42,.02);
-}
-
-.mono{
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size:12px;
-  color:var(--muted);
-  word-break:break-all;
-}
-
 /* ----------------- Phone fine-tuning ----------------- */
 @media (max-width: 520px){
   .app{padding:12px;}
-  .card{padding:14px;}
+  .card{padding:16px;}
   .row{gap:12px;}
   .pill{padding:8px 12px; font-size:13px;}
   .photoGrid .ph img{height:130px;}
 
-  /* Compact toolbar on phone: buttons fill row nicely */
-  .toolbar{gap:8px;}
-  .toolbar .btn{flex:1;}
+  /* topbar: držet vše v řádku a nepropadat mimo */
+  .topActions{gap:8px}
+}
+
+/* Ultra narrow phones: schovej "Mobile Logger" pill, nech jen datum + ikonku */
+@media (max-width: 360px){
+  .topActions .pill:first-child{display:none;}
 }
