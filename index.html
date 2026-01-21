@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="./styles.css" />
   <meta name="theme-color" content="#eef1f5" />
 </head>
+
 <body>
   <div class="shell">
     <aside class="sidebar">
@@ -34,19 +35,24 @@
     <section class="content">
       <header class="topbar">
         <div class="topTitle">Merch Visits</div>
-        <div class="topPills">
+
+        <!-- TOP ACTIONS (připravený pro datum v horní liště) -->
+        <div class="topActions">
           <span class="pill">Mobile Logger</span>
+
+          <!-- Ikona kalendáře -->
+          <label class="iconBtn" for="dayPicker" title="Vybrat den">📅</label>
+          <!-- Skrytej date input (napojí se v app.js, nebo ho použijeme na přepsání UI data) -->
+          <input id="dayPicker" class="dateHidden" type="date" />
         </div>
       </header>
 
+      <!-- JEDINÝ root pro aplikaci -->
       <main id="app" class="app"></main>
     </section>
-    <body>
-  <div id="app"></div>
+  </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script type="module" src="./app.js"></script>
-
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script type="module" src="./app.js"></script>
 </body>
-
 </html>
