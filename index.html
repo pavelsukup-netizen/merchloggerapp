@@ -17,14 +17,13 @@
         <div class="dot"></div>
         <div>
           <div class="sbTitle">Mobile Logger</div>
-          <div class="sbSub">Merch Visits</div>
+          <div class="sbSub">
+            Merch Visits • <span id="swVer">SW: —</span>
+          </div>
         </div>
       </div>
 
-      <div class="sbNav">
-        <button class="sbBtn" data-nav="home">🏠 Home</button>
-        <button class="sbBtn" data-nav="new">➕ Nová návštěva</button>
-      </div>
+      <!-- sidebar nav pryč (Home / Nová návštěva) -->
 
       <div class="sbFoot">
         <button id="btnInstall" class="btn ghost" hidden>Instalovat</button>
@@ -36,18 +35,17 @@
       <header class="topbar">
         <div class="topTitle">Merch Visits</div>
 
-        <!-- TOP ACTIONS (připravený pro datum v horní liště) -->
         <div class="topActions">
           <span class="pill">Mobile Logger</span>
 
-          <!-- Ikona kalendáře -->
-          <label class="iconBtn" for="dayPicker" title="Vybrat den">📅</label>
-          <!-- Skrytej date input (napojí se v app.js, nebo ho použijeme na přepsání UI data) -->
-          <input id="dayPicker" class="dateHidden" type="date" />
+          <!-- Klikatelnej kalendář: input je uvnitř ikonky -->
+          <label class="iconBtn" title="Vybrat den">
+            📅
+            <input id="dayPicker" type="date" />
+          </label>
         </div>
       </header>
 
-      <!-- JEDINÝ root pro aplikaci -->
       <main id="app" class="app"></main>
     </section>
   </div>
