@@ -1,33 +1,31 @@
 :root{
-  /* Sunlight / high-contrast theme */
-  --bg:#eef1f5;            /* světle šedá */
-  --card:#ffffff;          /* karty bílé */
-  --card2:#f7f8fb;         /* jemnej gradient */
-  --txt:#0f172a;           /* téměř černá */
-  --muted:#475569;         /* čitelná šedá */
+  /* “Premium mobile app” vibe */
+  --bg:#eef1f5;
+  --txt:#0f172a;
+  --muted:#556274;
   --line:rgba(15,23,42,.12);
 
-  --ok:#0ea85f;
+  --accent:#0ea5e9;       /* cyan/blue */
+  --accent2:#2563eb;      /* deeper blue */
+  --ok:#16a34a;
   --bad:#e11d48;
   --warn:#b45309;
-  --accent:#2563eb;
 
-  
-  --shadow: 0 10px 25px rgba(15,23,42,.08);
-  --r:18px;
+  --shadow: 0 12px 28px rgba(15,23,42,.10);
+  --shadow2: 0 8px 18px rgba(15,23,42,.08);
+  --r:22px;
 }
 
 *{box-sizing:border-box}
 html,body{
-  margin:0;
-  height:100%;
-  background:var(--bg);
+  margin:0; height:100%;
+  background: radial-gradient(1200px 600px at 50% -120px, #ffffff 0%, var(--bg) 55%);
   color:var(--txt);
   font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
 }
-a{color:var(--accent)}
+a{color:var(--accent2)}
 
-/* ----------------- Tablet shell layout (sidebar + content) ----------------- */
+/* ---------- Layout shell ---------- */
 .shell{
   min-height:100vh;
   display:grid;
@@ -49,6 +47,7 @@ a{color:var(--accent)}
 
 .content{min-width:0;}
 
+/* ---------- Topbar (right side status) ---------- */
 .topbar{
   position:sticky;
   top:0;
@@ -59,13 +58,16 @@ a{color:var(--accent)}
   gap:10px;
   padding:12px 14px;
   border-bottom:1px solid var(--line);
-  background:rgba(238,241,245,.85);
+  background:rgba(238,241,245,.75);
   backdrop-filter: blur(10px);
 }
 
-.topTitle{font-weight:850; letter-spacing:.2px;}
+.topTitle{
+  font-weight:900;
+  letter-spacing:.2px;
+}
 
-/* NEW: topbar right actions (pill + date pill + calendar icon) */
+/* topbar right controls */
 .topActions{
   display:flex;
   align-items:center;
@@ -74,40 +76,57 @@ a{color:var(--accent)}
   min-width:0;
 }
 
+/* ---------- Brand card ---------- */
 .sbBrand{
   display:flex;
-  gap:10px;
+  gap:12px;
   align-items:center;
-  padding:12px;
+  padding:14px;
   border:1px solid var(--line);
-  border-radius:18px;
-  background:rgba(15,23,42,.02);
-  box-shadow:var(--shadow);
+  border-radius:24px;
+  background: linear-gradient(180deg, rgba(255,255,255,.85), rgba(255,255,255,.60));
+  box-shadow: var(--shadow);
 }
+
 .dot{
-  width:12px;
-  height:12px;
-  border-radius:999px;
-  background:linear-gradient(135deg,var(--accent),var(--ok));
+  width:46px;
+  height:46px;
+  border-radius:18px;
+  background: linear-gradient(135deg, var(--accent2), var(--accent));
+  box-shadow: 0 10px 22px rgba(37,99,235,.25);
+  position:relative;
 }
-.sbTitle{font-weight:850; letter-spacing:.2px;}
+.dot:after{
+  content:"";
+  position:absolute;
+  inset:10px;
+  border-radius:14px;
+  background: rgba(255,255,255,.20);
+}
+
+.sbTitle{font-weight:950; letter-spacing:.2px; font-size:18px;}
 .sbSub{font-size:12px;color:var(--muted);margin-top:2px}
 
-.sbNav{display:grid; gap:10px}
+/* ---------- Segmented tabs in sidebar (mobile) ---------- */
+.sbNav{
+  display:grid;
+  gap:10px;
+}
+
 .sbBtn{
   width:100%;
   text-align:left;
   padding:14px 14px;
-  min-height:52px;               /* tap target */
+  min-height:52px;
   border-radius:16px;
   border:1px solid var(--line);
   background:#fff;
   color:var(--txt);
-  font-weight:800;
+  font-weight:900;
   cursor:pointer;
-  box-shadow: 0 6px 14px rgba(15,23,42,.06);
+  box-shadow: var(--shadow2);
 }
-.sbBtn:hover{filter:brightness(0.98)}
+.sbBtn:hover{filter:brightness(0.99)}
 .sbBtn:active{transform:translateY(1px)}
 
 .sbFoot{
@@ -116,21 +135,10 @@ a{color:var(--accent)}
   gap:10px;
 }
 
-/* Mobile: sidebar nahoře */
-@media (max-width: 860px){
-  .shell{grid-template-columns: 1fr;}
-  .sidebar{
-    position:relative;
-    height:auto;
-    border-right:none;
-    border-bottom:1px solid var(--line);
-  }
-}
-
-/* ----------------- App container ----------------- */
+/* ---------- App container ---------- */
 .app{
   padding:14px;
-  max-width:900px;
+  max-width:980px;
   margin:0 auto;
 }
 
@@ -139,28 +147,46 @@ a{color:var(--accent)}
   .grid.two{grid-template-columns:1fr 1fr}
 }
 
-/* ----------------- Cards / sections ----------------- */
+/* ---------- Cards ---------- */
 .card{
-  background:linear-gradient(180deg,var(--card),var(--card2));
-  border:1px solid var(--line);
-  border-radius:var(--r);
-  box-shadow:var(--shadow);
+  background: linear-gradient(180deg, rgba(255,255,255,.92), rgba(248,250,252,.85));
+  border:1px solid rgba(15,23,42,.10);
+  border-radius: var(--r);
+  box-shadow: var(--shadow);
   padding:16px;
 }
 
 .card h2{
   margin:0 0 10px 0;
-  font-size:16px;
+  font-size:18px;
   letter-spacing:.2px;
-  font-weight:850;
+  font-weight:950;
 }
 
-.card p{
-  margin:6px 0;
-  color:var(--muted);
-  line-height:1.35;
+.card p{ margin:6px 0; color:var(--muted); line-height:1.35; }
+
+/* ---------- Panels like screenshot (blue + green containers) ---------- */
+.panel{
+  border-radius: 26px;
+  padding: 14px;
+  box-shadow: var(--shadow);
+  border: 1px solid rgba(15,23,42,.08);
+}
+.panelBlue{
+  background: radial-gradient(900px 500px at 10% 0%, rgba(14,165,233,.55) 0%, rgba(37,99,235,.22) 40%, rgba(255,255,255,.20) 100%),
+              linear-gradient(180deg, rgba(14,165,233,.30), rgba(255,255,255,.14));
+}
+.panelGreen{
+  background: radial-gradient(900px 500px at 10% 0%, rgba(22,163,74,.50) 0%, rgba(34,197,94,.18) 45%, rgba(255,255,255,.18) 100%),
+              linear-gradient(180deg, rgba(22,163,74,.28), rgba(255,255,255,.14));
 }
 
+.panel .card{
+  box-shadow:none;
+  border-color: rgba(15,23,42,.10);
+}
+
+/* ---------- Rows / separators ---------- */
 .row{
   display:flex;
   gap:12px;
@@ -170,56 +196,59 @@ a{color:var(--accent)}
 .spacer{flex:1}
 .hr{
   height:1px;
-  background:var(--line);
+  background:rgba(15,23,42,.10);
   margin:12px 0;
 }
 
-/* ----------------- Buttons ----------------- */
+/* ---------- Buttons ---------- */
 .btn{
-  border:1px solid var(--line);
+  border:1px solid rgba(15,23,42,.12);
   background:#ffffff;
   color:var(--txt);
   padding:14px 16px;
-  border-radius:16px;
-  font-weight:850;
+  border-radius:18px;
+  font-weight:950;
   cursor:pointer;
-  min-height:52px;               /* tap target */
-  box-shadow: 0 6px 14px rgba(15,23,42,.06);
+  min-height:52px;
+  box-shadow: var(--shadow2);
 }
-.btn:hover{filter:brightness(0.98)}
+.btn:hover{filter:brightness(0.99)}
 .btn:active{transform:translateY(1px)}
 .btn:disabled{opacity:.5;cursor:not-allowed; box-shadow:none}
 
 .btn.ok{
-  background:rgba(14,168,95,.10);
-  border-color:rgba(14,168,95,.28);
+  background: linear-gradient(180deg, rgba(22,163,74,.16), rgba(22,163,74,.10));
+  border-color: rgba(22,163,74,.30);
 }
 .btn.bad{
-  background:rgba(225,29,72,.10);
-  border-color:rgba(225,29,72,.28);
+  background: linear-gradient(180deg, rgba(225,29,72,.16), rgba(225,29,72,.10));
+  border-color: rgba(225,29,72,.30);
+}
+.btn.primary{
+  background: linear-gradient(180deg, rgba(37,99,235,.95), rgba(14,165,233,.75));
+  color:#fff;
+  border-color: rgba(37,99,235,.25);
+  box-shadow: 0 14px 26px rgba(37,99,235,.22);
 }
 .btn.ghost{
   background:transparent;
   box-shadow:none;
 }
 
-/* ----------------- Inputs ----------------- */
+/* ---------- Inputs ---------- */
 .inp, select, textarea{
   width:100%;
   background:#fff;
   color:var(--txt);
-  border:1px solid var(--line);
-  border-radius:16px;
+  border:1px solid rgba(15,23,42,.12);
+  border-radius:18px;
   padding:14px 14px;
   outline:none;
   min-height:52px;
-  font-size:16px; /* iOS: zabrání zoomu */
+  font-size:16px;
 }
 
-textarea{
-  min-height:120px;
-  resize:vertical;
-}
+textarea{ min-height:120px; resize:vertical; }
 
 label{
   font-size:12px;
@@ -228,61 +257,45 @@ label{
   margin:10px 0 6px;
 }
 
-/* ----------------- Pills / badges ----------------- */
+/* ---------- Pills ---------- */
 .pill{
   display:inline-flex;
   align-items:center;
   gap:8px;
-  padding:8px 12px;
+  padding:9px 12px;
   border-radius:999px;
   background:rgba(15,23,42,.04);
-  border:1px solid var(--line);
+  border:1px solid rgba(15,23,42,.10);
   color:var(--muted);
   font-size:13px;
-  font-weight:750;
+  font-weight:850;
   min-width:0;
 }
+.pill.ok{ color:#0b5f3b; border-color:rgba(22,163,74,.30); background:rgba(22,163,74,.12); }
+.pill.warn{ color:#7a3e06; border-color:rgba(180,83,9,.30); background:rgba(180,83,9,.12); }
+.pill.bad{ color:#8b102a; border-color:rgba(225,29,72,.30); background:rgba(225,29,72,.12); }
 
-.pill.ok{
-  color:#0b5f3b;
-  border-color:rgba(14,168,95,.30);
-  background:rgba(14,168,95,.10);
-}
-.pill.warn{
-  color:#7a3e06;
-  border-color:rgba(180,83,9,.30);
-  background:rgba(180,83,9,.10);
-}
-.pill.bad{
-  color:#8b102a;
-  border-color:rgba(225,29,72,.30);
-  background:rgba(225,29,72,.10);
-}
-
-/* NEW: date pill formatting */
 #datePill{
   white-space:nowrap;
   font-variant-numeric: tabular-nums;
 }
 
-/* ----------------- Icon button (calendar) ----------------- */
+/* ---------- Calendar icon button (date picker overlay) ---------- */
 .iconBtn{
-  width:44px;
-  height:44px;
+  width:46px;
+  height:46px;
   display:grid;
   place-items:center;
-  border-radius:14px;
-  border:1px solid var(--line);
+  border-radius:16px;
+  border:1px solid rgba(15,23,42,.12);
   background:#fff;
-  box-shadow: 0 6px 14px rgba(15,23,42,.06);
+  box-shadow: var(--shadow2);
   cursor:pointer;
   user-select:none;
-  position:relative; /* input overlay */
+  position:relative;
   flex:0 0 auto;
 }
 .iconBtn:active{transform:translateY(1px)}
-
-/* Input je neviditelnej overlay => nic neroztahuje layout, ale otevře picker */
 .iconBtn input[type="date"]{
   position:absolute;
   inset:0;
@@ -292,14 +305,15 @@ label{
   appearance:none;
 }
 
-/* ----------------- Lists ----------------- */
-.list{display:grid; gap:10px}
+/* ---------- Lists / items ---------- */
+.list{display:grid; gap:12px}
 
 .item{
-  border:1px solid var(--line);
-  border-radius:16px;
+  border:1px solid rgba(15,23,42,.10);
+  border-radius:20px;
   padding:14px;
-  background:rgba(15,23,42,.03);
+  background: linear-gradient(180deg, rgba(255,255,255,.92), rgba(248,250,252,.82));
+  box-shadow: var(--shadow2);
 }
 
 .item .meta{
@@ -308,25 +322,25 @@ label{
   margin-top:6px;
 }
 
-/* ----------------- Questions ----------------- */
+/* “visit row” buttons alignment */
+.item .btn{
+  min-height:46px;
+  padding:12px 14px;
+}
+
+/* ---------- Questions ---------- */
 .q{
   padding:12px;
-  border:1px solid var(--line);
-  border-radius:16px;
-  background:rgba(15,23,42,.02);
+  border:1px solid rgba(15,23,42,.10);
+  border-radius:20px;
+  background:rgba(255,255,255,.65);
   margin:10px 0;
 }
-
-.q .ql{font-weight:900}
-.q .req{
-  color:var(--warn);
-  font-size:12px;
-  margin-left:6px
-}
-
+.q .ql{font-weight:950}
+.q .req{ color:var(--warn); font-size:12px; margin-left:6px }
 .small{font-size:12px;color:var(--muted)}
 
-/* ----------------- Photo grid ----------------- */
+/* ---------- Photo grid ---------- */
 .photoGrid{
   display:grid;
   grid-template-columns:repeat(3,1fr);
@@ -337,12 +351,12 @@ label{
 }
 
 .ph{
-  border:1px solid var(--line);
-  border-radius:16px;
+  border:1px solid rgba(15,23,42,.10);
+  border-radius:18px;
   overflow:hidden;
   background:#fff;
   position:relative;
-  box-shadow: 0 6px 14px rgba(15,23,42,.06);
+  box-shadow: var(--shadow2);
 }
 .ph img{
   width:100%;
@@ -356,26 +370,79 @@ label{
   right:6px;
   padding:8px 10px;
   border-radius:14px;
-  background:rgba(255,255,255,.85);
+  background:rgba(255,255,255,.88);
   color:var(--txt);
   border:1px solid rgba(15,23,42,.18);
   cursor:pointer;
 }
 .ph button:active{transform:translateY(1px)}
 
-/* ----------------- Phone fine-tuning ----------------- */
+/* ---------- Mobile: sidebar becomes top header like screenshot ---------- */
+@media (max-width: 860px){
+  .shell{grid-template-columns: 1fr;}
+
+  .sidebar{
+    position:relative;
+    height:auto;
+    border-right:none;
+    border-bottom:1px solid var(--line);
+    background: transparent;
+    padding: 12px 12px 6px;
+    gap:10px;
+  }
+
+  /* brand becomes the big header card */
+  .sbBrand{
+    border-radius: 28px;
+  }
+
+  /* turn nav into segmented control row */
+  .sbNav{
+    display:flex;
+    gap:0;
+    border-radius: 18px;
+    overflow:hidden;
+    border:1px solid rgba(15,23,42,.10);
+    background: rgba(255,255,255,.70);
+    box-shadow: var(--shadow2);
+  }
+  .sbBtn{
+    flex:1;
+    border:none;
+    border-radius:0;
+    box-shadow:none;
+    min-height:50px;
+    padding:12px 12px;
+    text-align:center;
+    font-weight:950;
+    background: transparent;
+  }
+  /* default “active” first tab (viz screenshot) */
+  .sbBtn:first-child{
+    background: linear-gradient(180deg, rgba(37,99,235,.95), rgba(14,165,233,.72));
+    color:#fff;
+  }
+  .sbBtn:first-child:hover{filter:none}
+
+  .sbFoot{
+    margin-top:0;
+  }
+
+  /* topbar on mobile stays simple */
+  .topbar{ padding:10px 12px; }
+}
+
+/* ---------- Phone fine-tuning ---------- */
 @media (max-width: 520px){
   .app{padding:12px;}
   .card{padding:16px;}
-  .row{gap:12px;}
+  .row{gap:10px;}
   .pill{padding:8px 12px; font-size:13px;}
   .photoGrid .ph img{height:130px;}
-
-  /* topbar: držet vše v řádku a nepropadat mimo */
   .topActions{gap:8px}
 }
 
-/* Ultra narrow phones: schovej "Mobile Logger" pill, nech jen datum + ikonku */
+/* ultra narrow: hide first pill in topbar if needed */
 @media (max-width: 360px){
   .topActions .pill:first-child{display:none;}
 }
