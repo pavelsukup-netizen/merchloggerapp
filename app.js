@@ -1169,11 +1169,18 @@ async function boot(){
   await loadPack();
   await loadDrafts();
 
-  if ("serviceWorker" in navigator){
-    try {
-      await navigator.serviceWorker.register("./sw.js");
-    } catch {}
-  }
+ if ("serviceWorker" in navigator){
+  navigator.serviceWorker.register("./sw.js")
+    .then(() => {
+      const sub = document.querySelector(".sbSub");
+      if (sub) sub.textContent = "Merch Visits • SW: activated";
+    })
+    .catch(() => {
+      const sub = document.querySelector(".sbSub");
+      if (sub) sub.textContent = "Merch Visits • SW: off";
+    });
+}
+
 
   // refresh badge on controller changes (když se SW aktualizuje)
   if ("serviceWorker" in navigator){
