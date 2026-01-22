@@ -394,49 +394,52 @@ function render(){
     return;
   }
 
-  // HOME (bez Advanced)
+  // HOME
   root.innerHTML = `
-    <div class="card">
-      <div class="cardHeader">
-        <div>
-          <h2>Job Pack</h2>
-          <div class="small">Den: <b>${esc(date)}</b></div>
-        </div>
-        <div class="cardActions">
+    <div class="panel panelBlue" id="jobpackPanel">
+      <div class="card">
+        <h2>Job Pack</h2>
+
+        <div class="row">
+          <span class="pill">Den: ${esc(date)}</span>
+          <span class="spacer"></span>
           ${state.pack ? `<span class="pill ok">Pack ✓</span>` : `<span class="pill bad">Pack: ne</span>`}
         </div>
-      </div>
 
-      <div class="row">
-        ${state.pack ? `<span class="pill">merch: <b>${esc(state.pack.merch?.id)}</b></span>` : ``}
-        ${state.pack ? `<span class="pill">packId: <b class="mono">${esc(state.pack.packId)}</b></span>` : ``}
-      </div>
+        ${state.pack ? `
+          <div class="row" style="margin-top:10px">
+            <span class="pill">merch: ${esc(state.pack.merch?.id)}</span>
+            <span class="pill">packId: ${esc(state.pack.packId)}</span>
+          </div>
+        ` : ``}
 
-      <div class="hr"></div>
+        <div class="hr"></div>
 
-      <div class="toolbar">
-        <label class="btn fileBtn">
-          <input id="filePack" type="file" accept="application/json" />
-          Vybrat jobpack
-        </label>
+        <div class="row">
+          <input id="filePack" class="inp" type="file" accept="application/json" />
+        </div>
 
-        <button class="btn ok" id="btnImport">Import</button>
-        <button class="btn ok" id="btnExport" ${state.pack ? "" : "disabled"}>Export denního ZIP</button>
+        <div class="row" style="margin-top:12px">
+          <button class="btn primary" id="btnImport">Import</button>
+          <button class="btn ok" id="btnExport" ${state.pack ? "" : "disabled"}>Export denního ZIP</button>
+        </div>
+
+        <div class="small" style="margin-top:10px; opacity:.9">
+          Tip: Datum vybíráš nahoře přes 📅 v liště.
+        </div>
       </div>
     </div>
 
-    <div class="card">
-      <div class="cardHeader">
-        <div>
-          <h2>Návštěvy</h2>
-          <div class="small">${esc(date)}</div>
-        </div>
+    <div class="panel panelGreen" id="visitsPanel" style="margin-top:14px">
+      <div class="card">
+        <h2>Návštěvy</h2>
+        ${renderVisits(date)}
       </div>
-      ${renderVisits(date)}
     </div>
   `;
 
   bindEvents();
+
 }
 
 function renderVisits(date){
@@ -875,11 +878,18 @@ function bindEvents(){
     const t = e.target;
 
     const nav = t.closest("[data-nav]");
-    if (nav){
-      state.route = { name: "home", visitId: null };
-      render();
-      return;
-    }
+if (nav){
+  const target = nav.getAttribute("data-nav");
+  state.route = { name: "home", visitId: null };
+  render();
+  // po renderu scrollni na panel
+  requestAnimationFrame(() => {
+    const el = document.querySelector(target === "visits" ? "#visitsPanel" : "#jobpackPanel");
+    el?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  return;
+}
+
 
     if (t.id === "btnImport"){
       const f = $("#filePack")?.files?.[0];
