@@ -271,15 +271,24 @@ function evalCond(draft, condRaw){
   const v = getAnswerValue(draft, cond.key);
 
   switch (cond.op) {
-    case "eq":  return v === cond.value;
-    case "neq": return v !== cond.value;
-    case "in":  return Array.isArray(cond.value) ? cond.value.includes(v) : false;
+    case "eq":
+      if (Array.isArray(v)) return v.includes(cond.value); // multi-select: eq = obsahuje hodnotu
+      return v === cond.value;
+    case "neq":
+      if (Array.isArray(v)) return !v.includes(cond.value);
+      return v !== cond.value;
+    case "in":
+      if (!Array.isArray(cond.value)) return false;
+      if (Array.isArray(v)) return v.some(x => cond.value.includes(x)); // průnik
+      return cond.value.includes(v);
     case "truthy":
+      if (Array.isArray(v)) return v.length > 0;
       if (typeof v === "boolean") return v === true;
       if (typeof v === "string") return v.trim().length > 0;
       if (v && typeof v === "object" && Array.isArray(v.photoIds)) return v.photoIds.length > 0;
       return !!v;
     case "falsy":
+      if (Array.isArray(v)) return v.length === 0;
       if (typeof v === "boolean") return v === false;
       if (typeof v === "string") return v.trim().length === 0;
       if (v && typeof v === "object" && Array.isArray(v.photoIds)) return v.photoIds.length === 0;
@@ -315,7 +324,6 @@ async function updateSWBadge(){
     return;
   }
 
-  // zkus získat verzi přes message (nejspolehlivější)
   const version = await new Promise((res) => {
     let done = false;
     const timer = setTimeout(() => { if(!done) res(null); }, 900);
@@ -337,7 +345,6 @@ async function updateSWBadge(){
   if (version){
     el.textContent = `SW: ${version}`;
   } else {
-    // fallback (když sw.js ještě neumí odpovědět)
     el.textContent = `SW: ${sw.state || "—"}`;
   }
 }
@@ -350,7 +357,6 @@ function syncTopbarDate(date){
   const pill = $("#datePill");
   if (pill) pill.textContent = (date || "—").split("-").reverse().join(". ");
 }
-
 
 /* ----------------- render ----------------- */
 function render(){
@@ -439,7 +445,6 @@ function render(){
   `;
 
   bindEvents();
-
 }
 
 function renderVisits(date){
@@ -505,6 +510,41 @@ function checkboxButtons(key, selected){
     <div class="row">
       <button class="btn ok" data-bool="true" data-qkey="${esc(key)}" aria-pressed="${yesSel}" ${yesStyle}>ANO</button>
       <button class="btn bad" data-bool="false" data-qkey="${esc(key)}" aria-pressed="${noSel}" ${noStyle}>NE</button>
+    </div>
+  `;
+}
+
+/* --- NEW: multi select renderer (checkbox chips) --- */
+function renderMultiSelectQuestion(q, draft){
+  const key = q.key;
+  const opts = q.options || [];
+  const cur = draft.answers?.[key];
+  const selected = Array.isArray(cur) ? cur : [];
+
+  return `
+    <div class="q" data-qtype="select" data-qkey="${esc(key)}" data-multi="1">
+      <div class="ql">${esc(q.label)} ${q.required ? `<span class="req">*</span>` : ""}</div>
+      ${q.help ? `<div class="small">${esc(q.help)}</div>` : ""}
+
+      <div class="hr"></div>
+
+      <div class="row" style="flex-wrap:wrap;gap:10px">
+        ${opts.map(o => {
+          const isOn = selected.includes(o);
+          return `
+            <label class="pill ${isOn ? "ok" : ""}" style="cursor:pointer;user-select:none">
+              <input type="checkbox"
+                     data-msopt="1"
+                     data-qkey="${esc(key)}"
+                     value="${esc(o)}"
+                     ${isOn ? "checked" : ""} />
+              <span style="margin-left:8px">${esc(o)}</span>
+            </label>
+          `;
+        }).join("")}
+      </div>
+
+      <div class="small">Vybráno: <b>${selected.length}</b></div>
     </div>
   `;
 }
@@ -673,6 +713,8 @@ function renderQuestion(q, draft){
   }
 
   if (q.type === "select"){
+    if (q.multi === true) return renderMultiSelectQuestion(q, draft);
+
     const opts = q.options || [];
     const v = typeof val === "string" ? val : "";
     return `
@@ -738,7 +780,12 @@ function validateDraftBeforeDone(draft){
       continue;
     }
     if (q.type === "select"){
-      if (q.required && (typeof v !== "string" || v.trim() === "")) errors.push(`Chybí výběr: ${q.label}`);
+      if (q.multi === true){
+        const arr = Array.isArray(v) ? v : [];
+        if (q.required && arr.length === 0) errors.push(`Chybí výběr (multi): ${q.label}`);
+      } else {
+        if (q.required && (typeof v !== "string" || v.trim() === "")) errors.push(`Chybí výběr: ${q.label}`);
+      }
       continue;
     }
     if (q.type === "photo"){
@@ -878,18 +925,16 @@ function bindEvents(){
     const t = e.target;
 
     const nav = t.closest("[data-nav]");
-if (nav){
-  const target = nav.getAttribute("data-nav");
-  state.route = { name: "home", visitId: null };
-  render();
-  // po renderu scrollni na panel
-  requestAnimationFrame(() => {
-    const el = document.querySelector(target === "visits" ? "#visitsPanel" : "#jobpackPanel");
-    el?.scrollIntoView({ behavior: "smooth", block: "start" });
-  });
-  return;
-}
-
+    if (nav){
+      const target = nav.getAttribute("data-nav");
+      state.route = { name: "home", visitId: null };
+      render();
+      requestAnimationFrame(() => {
+        const el = document.querySelector(target === "visits" ? "#visitsPanel" : "#jobpackPanel");
+        el?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      return;
+    }
 
     if (t.id === "btnImport"){
       const f = $("#filePack")?.files?.[0];
@@ -1111,6 +1156,30 @@ if (nav){
       return;
     }
 
+    // --- NEW: multi-select toggles ---
+    if (t.matches('input[data-msopt="1"]')){
+      const key = t.getAttribute("data-qkey");
+      const opt = t.value;
+      const checked = t.checked;
+
+      const visitId = state.route.visitId;
+      const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
+      if (!visit || !key) return;
+
+      const d = ensureDraft(visit);
+      const cur = d.answers?.[key];
+      const arr = Array.isArray(cur) ? [...cur] : [];
+
+      const next = checked
+        ? Array.from(new Set([...arr, opt]))
+        : arr.filter(x => x !== opt);
+
+      d.answers[key] = next;
+      await saveDraft(d);
+      render();
+      return;
+    }
+
     if (t.matches('select[data-gate="1"]')){
       const key = t.getAttribute("data-qkey");
       const visitId = state.route.visitId;
@@ -1142,7 +1211,13 @@ if (nav){
       await saveDraft(d);
       return;
     }
-    if (type === "select"){ d.answers[key] = t.value || ""; await saveDraft(d); return; }
+    // single select only; multi je řešený přes data-msopt výš
+    if (type === "select"){
+      if (q.getAttribute("data-multi") === "1") return;
+      d.answers[key] = t.value || "";
+      await saveDraft(d);
+      return;
+    }
 
     if (t.matches("[data-obsfield]")){
       const obsId = t.getAttribute("data-obsid");
@@ -1169,20 +1244,18 @@ async function boot(){
   await loadPack();
   await loadDrafts();
 
- if ("serviceWorker" in navigator){
-  navigator.serviceWorker.register("./sw.js")
-    .then(() => {
-      const sub = document.querySelector(".sbSub");
-      if (sub) sub.textContent = "Merch Visits • SW: activated";
-    })
-    .catch(() => {
-      const sub = document.querySelector(".sbSub");
-      if (sub) sub.textContent = "Merch Visits • SW: off";
-    });
-}
+  if ("serviceWorker" in navigator){
+    navigator.serviceWorker.register("./sw.js")
+      .then(() => {
+        const sub = document.querySelector(".sbSub");
+        if (sub) sub.textContent = "Merch Visits • SW: activated";
+      })
+      .catch(() => {
+        const sub = document.querySelector(".sbSub");
+        if (sub) sub.textContent = "Merch Visits • SW: off";
+      });
+  }
 
-
-  // refresh badge on controller changes (když se SW aktualizuje)
   if ("serviceWorker" in navigator){
     navigator.serviceWorker.addEventListener("controllerchange", () => {
       setTimeout(() => updateSWBadge().catch(()=>{}), 300);
