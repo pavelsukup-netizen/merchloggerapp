@@ -10,7 +10,10 @@ const state = {
   uiDate: null,
   drafts: new Map(),   // visitId -> draft
   route: { name: "home", visitId: null },
-  ui: { openMultiKey: null } // NEW: drží, která multiselect otázka je rozbalená
+  ui: {
+    openMultiKey: null,          // drží, která multiselect otázka je rozbalená
+    multiFilter: Object.create(null) // NEW: key -> string (filtr pro každou multiselect otázku zvlášť)
+  }
 };
 
 function $(sel){ return document.querySelector(sel); }
@@ -298,8 +301,8 @@ function evalCond(draft, condRaw){
       return true;
   }
 }
-  
-  function isQuestionForPartner(draft, q){
+
+function isQuestionForPartner(draft, q){
   const ids = q?.partnerIds;
 
   // když partnerIds není pole nebo je prázdné => otázka je pro všechny
@@ -507,12 +510,11 @@ function renderTemplateForm(tpl, draft){
       <div class="card">
         <h2>${esc(b.title || b.id)}</h2>
         ${qs
-  .filter(q => isQuestionForPartner(draft, q))
-  .filter(q => isQuestionActive(draft, q))
-  .map(q => renderQuestion(q, draft))
-  .join("")
-}
-
+          .filter(q => isQuestionForPartner(draft, q))
+          .filter(q => isQuestionActive(draft, q))
+          .map(q => renderQuestion(q, draft))
+          .join("")
+        }
       </div>
     `;
   }).join("");
@@ -534,7 +536,9 @@ function checkboxButtons(key, selected){
   `;
 }
 
-/* --- UPDATED: multi select renderer (collapsible) --- */
+function normStr(s){ return String(s ?? "").toLowerCase(); }
+
+/* --- UPDATED: multi select renderer (collapsible + search filter) --- */
 function renderMultiSelectQuestion(q, draft){
   const key = q.key;
   const opts = q.options || [];
@@ -548,6 +552,12 @@ function renderMultiSelectQuestion(q, draft){
   const summary = selected.length
     ? `<div class="small" style="margin-top:6px;opacity:.95">${selected.slice(0,4).map(esc).join(", ")}${selected.length>4 ? ` +${selected.length-4}` : ""}</div>`
     : ``;
+
+  const filterVal = state.ui.multiFilter[key] ?? "";
+  const f = normStr(filterVal).trim();
+  const visibleOpts = f
+    ? opts.filter(o => normStr(o).includes(f))
+    : opts;
 
   return `
     <div class="q" data-qtype="select" data-qkey="${esc(key)}" data-multi="1">
@@ -567,8 +577,19 @@ function renderMultiSelectQuestion(q, draft){
       <div class="hr"></div>
 
       <div class="msBody" style="${isOpen ? "" : "display:none;"}">
-        <div class="row" style="flex-wrap:wrap;gap:10px">
-          ${opts.map(o => {
+        <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap">
+          <input class="inp"
+                 type="text"
+                 placeholder="Hledat…"
+                 value="${esc(filterVal)}"
+                 data-msfilter="${esc(key)}"
+                 style="flex:1;min-width:180px" />
+          <button class="btn ghost" data-msclear="${esc(key)}">Smazat filtr</button>
+          <span class="pill">${visibleOpts.length}/${opts.length}</span>
+        </div>
+
+        <div class="row" style="flex-wrap:wrap;gap:10px;margin-top:10px">
+          ${visibleOpts.map(o => {
             const isOn = selected.includes(o);
             return `
               <label class="pill ${isOn ? "ok" : ""}" style="cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:8px">
@@ -687,7 +708,7 @@ function renderFurnitureObs(o, rules){
       <input class="inp" data-obsfield="atypLabel" data-obsid="${esc(o.id)}" value="${esc(o.atypLabel || "")}" />
 
       <label>Popis ${rules.requireDescription ? `<span class="req">*</span>` : ""}</label>
-      <textarea data-obsfield="description" data-obsid="${esc(o.description || "")}">${esc(o.description || "")}</textarea>
+      <textarea data-obsfield="description" data-obsid="${esc(o.id)}">${esc(o.description || "")}</textarea>
 
       ${rules.allowMultiple ? `
         <label>Množství <span class="req">*</span></label>
@@ -802,7 +823,7 @@ function validateDraftBeforeDone(draft){
 
   for (const q of qs){
     if (!isQuestionForPartner(draft, q)) continue;
-  if (!isQuestionActive(draft, q)) continue;
+    if (!isQuestionActive(draft, q)) continue;
     const key = q.key;
     const v = draft.answers?.[key];
 
@@ -976,12 +997,32 @@ function bindEvents(){
       return;
     }
 
-    // NEW: toggle multiselect accordion (only one open)
+    // toggle multiselect accordion (only one open)
     const msToggle = t.closest("[data-mstoggle]");
     if (msToggle){
       const key = msToggle.getAttribute("data-mstoggle");
       state.ui.openMultiKey = (state.ui.openMultiKey === key) ? null : key;
       render();
+      // po renderu vrať fokus do inputu filtru (pokud existuje a je otevřeno)
+      requestAnimationFrame(() => {
+        const inp = document.querySelector(`input[data-msfilter="${CSS.escape(key)}"]`);
+        inp?.focus?.();
+      });
+      return;
+    }
+
+    // NEW: clear multiselect filter
+    const msClear = t.closest("[data-msclear]");
+    if (msClear){
+      const key = msClear.getAttribute("data-msclear");
+      if (key){
+        state.ui.multiFilter[key] = "";
+        render();
+        requestAnimationFrame(() => {
+          const inp = document.querySelector(`input[data-msfilter="${CSS.escape(key)}"]`);
+          if (inp){ inp.focus(); }
+        });
+      }
       return;
     }
 
@@ -1196,6 +1237,27 @@ function bindEvents(){
       state.ui.openMultiKey = null;
       render();
       return;
+    }
+  };
+
+  // NEW: input handler pro filtr (rychlejší než onchange)
+  document.oninput = (e) => {
+    const t = e.target;
+
+    if (t && t.matches('input[data-msfilter]')){
+      const key = t.getAttribute("data-msfilter");
+      state.ui.multiFilter[key] = t.value ?? "";
+      render();
+
+      // vrať fokus a kurzor na konec, ať se to dá psát bez vzteku
+      requestAnimationFrame(() => {
+        const inp = document.querySelector(`input[data-msfilter="${CSS.escape(key)}"]`);
+        if (inp){
+          const pos = inp.value.length;
+          inp.focus();
+          try { inp.setSelectionRange(pos, pos); } catch {}
+        }
+      });
     }
   };
 
