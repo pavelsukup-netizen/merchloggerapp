@@ -569,9 +569,17 @@ function renderMultiSelectQuestion(q, draft){
         </div>
 
         ${countPill}
-        <button class="btn ghost" data-mstoggle="${esc(key)}" aria-expanded="${isOpen}" style="min-width:44px">
-          ${arrow}
-        </button>
+        <button class="btn ghost"
+        data-mstoggle="${esc(key)}"
+        aria-expanded="${isOpen}"
+        style="
+          min-width:44px;
+          background:${isOpen ? '#a78bfa' : '#60a5fa'};
+          color:#0b1220;
+          border:1px solid rgba(15,23,42,.12);
+        ">
+  ${arrow}
+</button>
       </div>
 
       <div class="hr"></div>
