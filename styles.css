@@ -446,3 +446,51 @@ label{
 @media (max-width: 360px){
   .topActions .pill:first-child{display:none;}
 }
+/* ===============================
+   MULTISELECT + BARVY OTÁZEK (override)
+   vlož na KONEC styles.css
+================================== */
+
+/* 1) Barevné odlišení typů otázek (celé okno otázky) */
+.q[data-qtype="checkbox"]{
+  background: rgba(59,130,246,.10);           /* světle modrá */
+  border-color: rgba(59,130,246,.20);
+}
+.q[data-qtype="furniture_trigger"]{
+  background: rgba(168,85,247,.10);           /* světle fialová */
+  border-color: rgba(168,85,247,.20);
+}
+.q[data-qtype="photo"]{
+  background: rgba(148,163,184,.14);          /* šedá */
+  border-color: rgba(148,163,184,.22);
+}
+
+/* 2) Multiselect – šipka barvy (zavřeno = modrá, otevřeno = fialová) */
+.q[data-qtype="select"][data-multi="1"] button[data-mstoggle]{
+  color: #2563eb;                              /* modrá */
+  border-color: rgba(37,99,235,.35);
+}
+.q[data-qtype="select"][data-multi="1"] button[data-mstoggle][aria-expanded="true"]{
+  color: #7c3aed;                              /* fialová */
+  border-color: rgba(124,58,237,.35);
+}
+
+/* 3) Multiselect – když je rozbalený, celé okno do žluta */
+.q[data-qtype="select"][data-multi="1"]:has(button[data-mstoggle][aria-expanded="true"]){
+  background: rgba(250,204,21,.16);            /* žlutá */
+  border-color: rgba(250,204,21,.30);
+}
+
+/* 4) Multiselect – tlačítko "Smazat filtr" oranžové
+   (funguje pokud má tlačítko class .msClear nebo data-msclear) */
+.q[data-qtype="select"][data-multi="1"] .msClear,
+.q[data-qtype="select"][data-multi="1"] button[data-msclear]{
+  background: rgba(249,115,22,.16);
+  border-color: rgba(249,115,22,.35);
+  color: #c2410c;
+  font-weight: 800;
+}
+.q[data-qtype="select"][data-multi="1"] .msClear:hover,
+.q[data-qtype="select"][data-multi="1"] button[data-msclear]:hover{
+  background: rgba(249,115,22,.22);
+}
