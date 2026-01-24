@@ -298,6 +298,19 @@ function evalCond(draft, condRaw){
       return true;
   }
 }
+  
+  function isQuestionForPartner(draft, q){
+  const ids = q?.partnerIds;
+
+  // když partnerIds není pole nebo je prázdné => otázka je pro všechny
+  if (!Array.isArray(ids) || ids.length === 0) return true;
+
+  // retailerId bereme z draftu (už ho tam dáváš v ensureDraft)
+  const rid = draft?.retailerId || "";
+  if (!rid) return false; // když nevíme retailer, radši otázku skryjeme
+
+  return ids.includes(rid);
+}
 
 function isQuestionActive(draft, q){
   const d = q?.dependsOn;
@@ -493,7 +506,13 @@ function renderTemplateForm(tpl, draft){
     return `
       <div class="card">
         <h2>${esc(b.title || b.id)}</h2>
-        ${qs.filter(q => isQuestionActive(draft, q)).map(q => renderQuestion(q, draft)).join("")}
+        ${qs
+  .filter(q => isQuestionForPartner(draft, q))
+  .filter(q => isQuestionActive(draft, q))
+  .map(q => renderQuestion(q, draft))
+  .join("")
+}
+
       </div>
     `;
   }).join("");
@@ -782,7 +801,8 @@ function validateDraftBeforeDone(draft){
   const qs = collectQuestions(tpl);
 
   for (const q of qs){
-    if (!isQuestionActive(draft, q)) continue;
+    if (!isQuestionForPartner(draft, q)) continue;
+  if (!isQuestionActive(draft, q)) continue;
     const key = q.key;
     const v = draft.answers?.[key];
 
