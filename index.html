@@ -11,48 +11,34 @@
 </head>
 
 <body>
-  <div class="shell">
-    <aside class="sidebar">
-      <div class="sbBrand">
-        <div class="dot"></div>
-        <div>
-          <div class="sbTitle">Mobile Logger</div>
-          <div class="sbSub">
-            Merch Visits • <span id="swVer">SW: —</span>
-          </div>
+  <!-- NEW: modern header (sticky, glass, modern controls) -->
+  <header class="appHeader">
+    <div class="brand">
+      <div class="brandLogo" aria-hidden="true"></div>
+
+      <div class="brandText">
+        <div class="sbTitle">Mobile Logger</div>
+        <div class="sbSub">
+          <span class="muted">Merch Visits •</span>
+          <span id="swVer">SW: —</span>
+          <span class="muted">• PWA • offline-ready</span>
         </div>
       </div>
+    </div>
 
-      <!-- sidebar nav pryč (Home / Nová návštěva) -->
+    <div class="topControls">
+      <span class="datePill" id="datePill">—</span>
 
-      <div class="sbFoot">
-        <button id="btnInstall" class="btn ghost" hidden>Instalovat</button>
-        <div class="small">PWA • offline-ready</div>
-      </div>
-    </aside>
+      <!-- klikneš na ikonku a otevře se date picker -->
+      <label class="iconBtn" title="Vybrat den">
+        <input id="dayPicker" type="date" aria-label="Vybrat den" />
+        <span class="icon" aria-hidden="true">📅</span>
+      </label>
+    </div>
+  </header>
 
-    <section class="content">
-      <header class="topbar">
-        <div class="topTitle">Merch Visits</div>
-
-        <div class="topActions">
-  <span class="pill">Mobile Logger</span>
-
-  <!-- datum jako bublina -->
-  <span class="pill" id="datePill">—</span>
-
-  <!-- jen ikonka, input je neviditelnej overlay -->
-  <label class="iconBtn" title="Vybrat den">
-    📅
-    <input id="dayPicker" type="date" aria-label="Vybrat den" />
-  </label>
-</div>
-
-      </header>
-
-      <main id="app" class="app"></main>
-    </section>
-  </div>
+  <!-- App root -->
+  <main id="app" class="app"></main>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script type="module" src="./app.js"></script>
