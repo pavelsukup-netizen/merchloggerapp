@@ -1,6 +1,6 @@
-const SW_VERSION = "2026-01-26";
+const SW_VERSION = "2026-01-27";
 // sw.js — cache + offline. BUMP VER při každé změně souborů.
-const CACHE = "mv_mobile_logger_v26";
+const CACHE = "mv_mobile_logger_v27";
 
 const ASSETS = [
   "./",
