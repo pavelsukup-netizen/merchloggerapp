@@ -1,496 +1,470 @@
+/* ===============================
+   Merch Visits Mobile Logger
+   Modern UI styles (no Tailwind build)
+   =============================== */
+
 :root{
-  /* “Premium mobile app” vibe */
-  --bg:#eef1f5;
-  --txt:#0f172a;
-  --muted:#556274;
-  --line:rgba(15,23,42,.12);
+  --bg: #0b1220;
+  --bg2: #0f1b2f;
+  --surface: #ffffff;
+  --surface2: #f6f8fc;
 
-  --accent:#0ea5e9;       /* cyan/blue */
-  --accent2:#2563eb;      /* deeper blue */
-  --ok:#16a34a;
-  --bad:#e11d48;
-  --warn:#b45309;
+  --text: #0f172a;
+  --muted: #55657a;
 
-  --shadow: 0 12px 28px rgba(15,23,42,.10);
-  --shadow2: 0 8px 18px rgba(15,23,42,.08);
-  --r:22px;
+  --stroke: rgba(15, 23, 42, .10);
+  --stroke2: rgba(15, 23, 42, .14);
+
+  --shadow: 0 10px 30px rgba(15, 23, 42, .10);
+  --shadow2: 0 6px 18px rgba(15, 23, 42, .10);
+
+  --primary: #2563eb;   /* blue */
+  --primary2:#60a5fa;
+
+  --violet:  #7c3aed;
+  --violet2: #a78bfa;
+
+  --ok:   #10b981;
+  --bad:  #f43f5e;
+  --warn: #f59e0b;
+
+  --pill: #eef2ff;
+
+  --q-blue:   #e8f1ff;  /* checkbox q */
+  --q-violet: #f3e8ff;  /* furniture_trigger q */
+  --q-gray:   #eef2f7;  /* photo q */
+  --q-yellow: #fff6d8;  /* open multiselect q */
+
+  --radius: 18px;
+  --radius-sm: 14px;
 }
 
-*{box-sizing:border-box}
-html,body{
-  margin:0; height:100%;
-  background: radial-gradient(1200px 600px at 50% -120px, #ffffff 0%, var(--bg) 55%);
-  color:var(--txt);
-  font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
+/* Base */
+*{ box-sizing:border-box; }
+html, body { height:100%; }
+body{
+  margin:0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+  color: var(--text);
+  background:
+    radial-gradient(1000px 600px at 10% 0%, rgba(96,165,250,.35), transparent 55%),
+    radial-gradient(900px 700px at 90% 10%, rgba(167,139,250,.35), transparent 55%),
+    linear-gradient(180deg, #f4f7ff 0%, #f6f8fc 55%, #f8fafc 100%);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
-a{color:var(--accent2)}
 
-/* ---------- Layout shell ---------- */
-.shell{
-  min-height:100vh;
-  display:grid;
-  grid-template-columns: 280px 1fr;
+#app, #main{
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 14px 12px 90px;
 }
 
-.sidebar{
-  position:sticky;
-  top:0;
-  height:100vh;
-  padding:14px;
-  border-right:1px solid var(--line);
-  background:rgba(238,241,245,.92);
+/* Topbar bits (if present) */
+.sb{
+  position: sticky;
+  top: 0;
+  z-index: 20;
   backdrop-filter: blur(10px);
-  display:flex;
-  flex-direction:column;
-  gap:14px;
-}
-
-.content{min-width:0;}
-
-/* ---------- Topbar (right side status) ---------- */
-.topbar{
-  position:sticky;
-  top:0;
-  z-index:10;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:10px;
-  padding:12px 14px;
-  border-bottom:1px solid var(--line);
-  background:rgba(238,241,245,.75);
-  backdrop-filter: blur(10px);
-}
-
-.topTitle{
-  font-weight:900;
-  letter-spacing:.2px;
-}
-
-/* topbar right controls */
-.topActions{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  flex-wrap:nowrap;
-  min-width:0;
-}
-
-/* ---------- Brand card ---------- */
-.sbBrand{
-  display:flex;
-  gap:12px;
-  align-items:center;
-  padding:14px;
-  border:1px solid var(--line);
-  border-radius:24px;
-  background: linear-gradient(180deg, rgba(255,255,255,.85), rgba(255,255,255,.60));
-  box-shadow: var(--shadow);
-}
-
-.dot{
-  width:46px;
-  height:46px;
-  border-radius:18px;
-  background: linear-gradient(135deg, var(--accent2), var(--accent));
-  box-shadow: 0 10px 22px rgba(37,99,235,.25);
-  position:relative;
-}
-.dot:after{
-  content:"";
-  position:absolute;
-  inset:10px;
-  border-radius:14px;
-  background: rgba(255,255,255,.20);
-}
-
-.sbTitle{font-weight:950; letter-spacing:.2px; font-size:18px;}
-.sbSub{font-size:12px;color:var(--muted);margin-top:2px}
-
-/* ---------- Segmented tabs in sidebar (mobile) ---------- */
-.sbNav{
-  display:grid;
-  gap:10px;
-}
-
-.sbBtn{
-  width:100%;
-  text-align:left;
-  padding:14px 14px;
-  min-height:52px;
-  border-radius:16px;
-  border:1px solid var(--line);
-  background:#fff;
-  color:var(--txt);
-  font-weight:900;
-  cursor:pointer;
+  background: rgba(255,255,255,.70);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
   box-shadow: var(--shadow2);
-}
-.sbBtn:hover{filter:brightness(0.99)}
-.sbBtn:active{transform:translateY(1px)}
-
-.sbFoot{
-  margin-top:auto;
-  display:grid;
-  gap:10px;
+  padding: 10px 12px;
+  margin: 6px 0 12px;
 }
 
-/* ---------- App container ---------- */
-.app{
-  padding:14px;
-  max-width:980px;
-  margin:0 auto;
-}
-
-.grid{display:grid; gap:12px}
-@media (min-width:760px){
-  .grid.two{grid-template-columns:1fr 1fr}
-}
-
-/* ---------- Cards ---------- */
-.card{
-  background: linear-gradient(180deg, rgba(255,255,255,.92), rgba(248,250,252,.85));
-  border:1px solid rgba(15,23,42,.10);
-  border-radius: var(--r);
-  box-shadow: var(--shadow);
-  padding:16px;
-}
-
-.card h2{
-  margin:0 0 10px 0;
-  font-size:18px;
-  letter-spacing:.2px;
-  font-weight:950;
-}
-
-.card p{ margin:6px 0; color:var(--muted); line-height:1.35; }
-
-/* ---------- Panels like screenshot (blue + green containers) ---------- */
-.panel{
-  border-radius: 26px;
-  padding: 14px;
-  box-shadow: var(--shadow);
-  border: 1px solid rgba(15,23,42,.08);
-}
-.panelBlue{
-  background: radial-gradient(900px 500px at 10% 0%, rgba(14,165,233,.55) 0%, rgba(37,99,235,.22) 40%, rgba(255,255,255,.20) 100%),
-              linear-gradient(180deg, rgba(14,165,233,.30), rgba(255,255,255,.14));
-}
-.panelGreen{
-  background: radial-gradient(900px 500px at 10% 0%, rgba(22,163,74,.50) 0%, rgba(34,197,94,.18) 45%, rgba(255,255,255,.18) 100%),
-              linear-gradient(180deg, rgba(22,163,74,.28), rgba(255,255,255,.14));
-}
-
-.panel .card{
-  box-shadow:none;
-  border-color: rgba(15,23,42,.10);
-}
-
-/* ---------- Rows / separators ---------- */
-.row{
+.sbRow{
   display:flex;
-  gap:12px;
-  flex-wrap:wrap;
   align-items:center;
+  gap:10px;
+  flex-wrap: wrap;
 }
-.spacer{flex:1}
+
+.sbTitle{
+  font-weight: 900;
+  letter-spacing: .2px;
+}
+.sbSub{
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* Panels & cards */
+.panel{
+  border-radius: calc(var(--radius) + 4px);
+  padding: 12px;
+  border: 1px solid var(--stroke);
+  box-shadow: var(--shadow2);
+  background: rgba(255,255,255,.70);
+  backdrop-filter: blur(10px);
+}
+
+.panelBlue{
+  background:
+    radial-gradient(700px 240px at 0% 0%, rgba(37,99,235,.18), transparent 55%),
+    rgba(255,255,255,.72);
+  border-color: rgba(37,99,235,.18);
+}
+
+.panelGreen{
+  background:
+    radial-gradient(700px 240px at 0% 0%, rgba(16,185,129,.18), transparent 55%),
+    rgba(255,255,255,.72);
+  border-color: rgba(16,185,129,.18);
+}
+
+.card{
+  background: rgba(255,255,255,.92);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+}
+
+.card + .card{ margin-top: 12px; }
+
+h2{
+  margin: 0 0 10px;
+  font-size: 18px;
+  letter-spacing: .2px;
+}
+
+p{ margin: 8px 0; }
+.small{
+  font-size: 12px;
+  color: var(--muted);
+}
+.meta{
+  margin-top: 8px;
+  font-size: 12px;
+  color: rgba(85, 101, 122, .92);
+}
+
 .hr{
   height:1px;
-  background:rgba(15,23,42,.10);
-  margin:12px 0;
+  background: rgba(15,23,42,.10);
+  margin: 12px 0;
+  border-radius: 999px;
 }
 
-/* ---------- Buttons ---------- */
+.row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  flex-wrap: wrap;
+}
+.spacer{ flex: 1; }
+
+/* Inputs */
+.inp, select, textarea, input[type="file"]{
+  font: inherit;
+}
+
+.inp, select, textarea{
+  width: 100%;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--stroke2);
+  background: #fff;
+  padding: 12px 12px;
+  box-shadow: 0 2px 10px rgba(15,23,42,.06);
+  outline: none;
+}
+
+textarea{
+  min-height: 96px;
+  resize: vertical;
+}
+
+.inp:focus, select:focus, textarea:focus{
+  border-color: rgba(37,99,235,.45);
+  box-shadow: 0 0 0 4px rgba(37,99,235,.15), 0 2px 10px rgba(15,23,42,.08);
+}
+
+/* Buttons */
 .btn{
-  border:1px solid rgba(15,23,42,.12);
-  background:#ffffff;
-  color:var(--txt);
-  padding:14px 16px;
-  border-radius:18px;
-  font-weight:950;
-  cursor:pointer;
-  min-height:52px;
-  box-shadow: var(--shadow2);
+  appearance: none;
+  border: 1px solid var(--stroke2);
+  background: #fff;
+  color: var(--text);
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 800;
+  letter-spacing: .2px;
+  box-shadow: 0 6px 16px rgba(15,23,42,.10);
+  cursor: pointer;
+  transition: transform .08s ease, box-shadow .12s ease, filter .12s ease, background .12s ease;
+  user-select: none;
 }
-.btn:hover{filter:brightness(0.99)}
-.btn:active{transform:translateY(1px)}
-.btn:disabled{opacity:.5;cursor:not-allowed; box-shadow:none}
 
+.btn:active{ transform: translateY(1px) scale(.99); }
+.btn:disabled{
+  opacity: .55;
+  cursor: not-allowed;
+  filter: grayscale(.2);
+}
+
+.btn.primary{
+  border: 0;
+  color: #fff;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary2) 100%);
+}
 .btn.ok{
-  background: linear-gradient(180deg, rgba(22,163,74,.16), rgba(22,163,74,.10));
-  border-color: rgba(22,163,74,.30);
+  border: 0;
+  color:#07301f;
+  background: linear-gradient(135deg, rgba(16,185,129,.35), rgba(16,185,129,.18));
 }
 .btn.bad{
-  background: linear-gradient(180deg, rgba(225,29,72,.16), rgba(225,29,72,.10));
-  border-color: rgba(225,29,72,.30);
+  border: 0;
+  color:#3b0a16;
+  background: linear-gradient(135deg, rgba(244,63,94,.25), rgba(244,63,94,.14));
 }
-.btn.primary{
-  background: linear-gradient(180deg, rgba(37,99,235,.95), rgba(14,165,233,.75));
-  color:#fff;
-  border-color: rgba(37,99,235,.25);
-  box-shadow: 0 14px 26px rgba(37,99,235,.22);
+.btn.warn{
+  border: 0;
+  color:#3a2203;
+  background: linear-gradient(135deg, rgba(245,158,11,.35), rgba(245,158,11,.18));
 }
 .btn.ghost{
-  background:transparent;
-  box-shadow:none;
+  background: rgba(255,255,255,.85);
 }
 
-/* ---------- Inputs ---------- */
-.inp, select, textarea{
-  width:100%;
-  background:#fff;
-  color:var(--txt);
-  border:1px solid rgba(15,23,42,.12);
-  border-radius:18px;
-  padding:14px 14px;
-  outline:none;
-  min-height:52px;
-  font-size:16px;
-}
+.btn:hover{ filter: brightness(1.02); }
+.btn.primary:hover{ filter: brightness(1.05); }
 
-textarea{ min-height:120px; resize:vertical; }
-
-label{
-  font-size:12px;
-  color:var(--muted);
-  display:block;
-  margin:10px 0 6px;
-}
-
-/* ---------- Pills ---------- */
+/* Pills (chips/badges) */
 .pill{
   display:inline-flex;
   align-items:center;
   gap:8px;
-  padding:9px 12px;
-  border-radius:999px;
-  background:rgba(15,23,42,.04);
-  border:1px solid rgba(15,23,42,.10);
-  color:var(--muted);
-  font-size:13px;
-  font-weight:850;
-  min-width:0;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(15,23,42,.10);
+  background: rgba(255,255,255,.75);
+  color: rgba(15,23,42,.85);
+  font-size: 12px;
+  font-weight: 800;
 }
-.pill.ok{ color:#0b5f3b; border-color:rgba(22,163,74,.30); background:rgba(22,163,74,.12); }
-.pill.warn{ color:#7a3e06; border-color:rgba(180,83,9,.30); background:rgba(180,83,9,.12); }
-.pill.bad{ color:#8b102a; border-color:rgba(225,29,72,.30); background:rgba(225,29,72,.12); }
-
-#datePill{
-  white-space:nowrap;
-  font-variant-numeric: tabular-nums;
+.pill.ok{
+  background: rgba(16,185,129,.16);
+  border-color: rgba(16,185,129,.25);
+  color: #064e3b;
 }
-
-/* ---------- Calendar icon button (date picker overlay) ---------- */
-.iconBtn{
-  width:46px;
-  height:46px;
-  display:grid;
-  place-items:center;
-  border-radius:16px;
-  border:1px solid rgba(15,23,42,.12);
-  background:#fff;
-  box-shadow: var(--shadow2);
-  cursor:pointer;
-  user-select:none;
-  position:relative;
-  flex:0 0 auto;
+.pill.bad{
+  background: rgba(244,63,94,.14);
+  border-color: rgba(244,63,94,.22);
+  color: #7f1d1d;
 }
-.iconBtn:active{transform:translateY(1px)}
-.iconBtn input[type="date"]{
-  position:absolute;
-  inset:0;
-  opacity:0;
-  cursor:pointer;
-  -webkit-appearance:none;
-  appearance:none;
+.pill.warn{
+  background: rgba(245,158,11,.18);
+  border-color: rgba(245,158,11,.26);
+  color: #7c2d12;
 }
 
-/* ---------- Lists / items ---------- */
-.list{display:grid; gap:12px}
-
+/* Lists */
+.list{
+  display:flex;
+  flex-direction: column;
+  gap: 10px;
+}
 .item{
-  border:1px solid rgba(15,23,42,.10);
-  border-radius:20px;
-  padding:14px;
-  background: linear-gradient(180deg, rgba(255,255,255,.92), rgba(248,250,252,.82));
-  box-shadow: var(--shadow2);
+  background: rgba(255,255,255,.92);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 22px rgba(15,23,42,.08);
+  padding: 12px;
 }
 
-.item .meta{
-  font-size:12px;
-  color:var(--muted);
-  margin-top:6px;
-}
-
-/* “visit row” buttons alignment */
-.item .btn{
-  min-height:46px;
-  padding:12px 14px;
-}
-
-/* ---------- Questions ---------- */
+/* Questions */
 .q{
-  padding:12px;
-  border:1px solid rgba(15,23,42,.10);
-  border-radius:20px;
-  background:rgba(255,255,255,.65);
-  margin:10px 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--stroke);
+  background: rgba(255,255,255,.92);
+  box-shadow: 0 10px 26px rgba(15,23,42,.08);
+  padding: 12px;
+  margin-top: 12px;
 }
-.q .ql{font-weight:950}
-.q .req{ color:var(--warn); font-size:12px; margin-left:6px }
-.small{font-size:12px;color:var(--muted)}
 
-/* ---------- Photo grid ---------- */
+.ql{
+  font-weight: 950;
+  font-size: 15px;
+  letter-spacing: .2px;
+}
+
+.req{
+  color: var(--bad);
+  font-weight: 900;
+  margin-left: 4px;
+}
+
+/* Type-specific backgrounds */
+.q[data-qtype="checkbox"]{
+  background: var(--q-blue);
+  border-color: rgba(37,99,235,.18);
+}
+
+.q[data-qtype="furniture_trigger"]{
+  background: var(--q-violet);
+  border-color: rgba(124,58,237,.18);
+}
+
+.q[data-qtype="photo"]{
+  background: var(--q-gray);
+  border-color: rgba(15,23,42,.12);
+}
+
+/* Multiselect base (collapsed) */
+.q[data-qtype="select"][data-multi="1"]{
+  background: rgba(255,255,255,.92);
+}
+
+/* Multiselect OPEN background (uses :has - modern Chrome/Android OK) */
+.q[data-qtype="select"][data-multi="1"]:has([data-mstoggle][aria-expanded="true"]){
+  background: var(--q-yellow);
+  border-color: rgba(245,158,11,.22);
+}
+
+/* The arrow toggle button – background color (not only arrow!) */
+.btn.ghost[data-mstoggle]{
+  width: 52px;
+  height: 44px;
+  padding: 0;
+  border-radius: 16px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  border: 0;
+  color: #fff;
+  box-shadow: 0 10px 20px rgba(15,23,42,.18);
+}
+
+.btn.ghost[data-mstoggle][aria-expanded="false"]{
+  background: linear-gradient(135deg, #2563eb 0%, #60a5fa 100%); /* blue */
+}
+
+.btn.ghost[data-mstoggle][aria-expanded="true"]{
+  background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%); /* violet */
+}
+
+/* Multiselect body */
+.msBody{
+  margin-top: 10px;
+  padding: 10px;
+  border-radius: var(--radius);
+  background: rgba(255,255,255,.70);
+  border: 1px solid rgba(15,23,42,.10);
+  box-shadow: 0 8px 22px rgba(15,23,42,.06);
+}
+
+/* If list is huge, keep it scrollable */
+.msBody .row{
+  gap: 10px;
+}
+.msBody .row:last-child{
+  margin-top: 10px;
+}
+
+.msBody{
+  max-height: 340px;
+  overflow: auto;
+}
+
+/* Multi options grid */
+.msBody > .row{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  align-items: start;
+}
+
+/* Chip-like checkbox labels inside multiselect */
+.q[data-qtype="select"][data-multi="1"] label.pill{
+  justify-content: flex-start;
+  background: rgba(255,255,255,.75);
+  border-color: rgba(15,23,42,.10);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 850;
+  box-shadow: 0 6px 16px rgba(15,23,42,.06);
+}
+
+.q[data-qtype="select"][data-multi="1"] label.pill.ok{
+  background: rgba(16,185,129,.16);
+  border-color: rgba(16,185,129,.26);
+}
+
+/* Make checkbox prettier but keep it functional */
+.q[data-qtype="select"][data-multi="1"] input[type="checkbox"]{
+  width: 18px;
+  height: 18px;
+  accent-color: var(--ok);
+}
+
+/* Photo grid */
 .photoGrid{
   display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:10px
-}
-@media (min-width:760px){
-  .photoGrid{grid-template-columns:repeat(5,1fr)}
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
 }
 
 .ph{
-  border:1px solid rgba(15,23,42,.10);
-  border-radius:18px;
-  overflow:hidden;
-  background:#fff;
-  position:relative;
-  box-shadow: var(--shadow2);
+  position: relative;
+  overflow: hidden;
+  border-radius: 16px;
+  border: 1px solid rgba(15,23,42,.12);
+  background: #fff;
+  box-shadow: 0 8px 18px rgba(15,23,42,.08);
+  aspect-ratio: 1 / 1;
 }
+
 .ph img{
-  width:100%;
-  height:120px;
-  object-fit:cover;
-  display:block
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display:block;
 }
-.ph button{
+
+.ph .btn.ghost{
   position:absolute;
-  top:6px;
-  right:6px;
-  padding:8px 10px;
-  border-radius:14px;
-  background:rgba(255,255,255,.88);
-  color:var(--txt);
-  border:1px solid rgba(15,23,42,.18);
-  cursor:pointer;
-}
-.ph button:active{transform:translateY(1px)}
-
-/* ---------- Mobile: sidebar becomes top header like screenshot ---------- */
-@media (max-width: 860px){
-  .shell{grid-template-columns: 1fr;}
-
-  .sidebar{
-    position:relative;
-    height:auto;
-    border-right:none;
-    border-bottom:1px solid var(--line);
-    background: transparent;
-    padding: 12px 12px 6px;
-    gap:10px;
-  }
-
-  /* brand becomes the big header card */
-  .sbBrand{
-    border-radius: 28px;
-  }
-
-  /* turn nav into segmented control row */
-  .sbNav{
-    display:flex;
-    gap:0;
-    border-radius: 18px;
-    overflow:hidden;
-    border:1px solid rgba(15,23,42,.10);
-    background: rgba(255,255,255,.70);
-    box-shadow: var(--shadow2);
-  }
-  .sbBtn{
-    flex:1;
-    border:none;
-    border-radius:0;
-    box-shadow:none;
-    min-height:50px;
-    padding:12px 12px;
-    text-align:center;
-    font-weight:950;
-    background: transparent;
-  }
-  /* default “active” first tab (viz screenshot) */
-  .sbBtn:first-child{
-    background: linear-gradient(180deg, rgba(37,99,235,.95), rgba(14,165,233,.72));
-    color:#fff;
-  }
-  .sbBtn:first-child:hover{filter:none}
-
-  .sbFoot{
-    margin-top:0;
-  }
-
-  /* topbar on mobile stays simple */
-  .topbar{ padding:10px 12px; }
+  top: 8px;
+  right: 8px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 999px;
+  background: rgba(255,255,255,.85);
+  border: 1px solid rgba(15,23,42,.10);
+  box-shadow: 0 8px 18px rgba(15,23,42,.12);
 }
 
-/* ---------- Phone fine-tuning ---------- */
-@media (max-width: 520px){
-  .app{padding:12px;}
-  .card{padding:16px;}
-  .row{gap:10px;}
-  .pill{padding:8px 12px; font-size:13px;}
-  .photoGrid .ph img{height:130px;}
-  .topActions{gap:8px}
+/* Labels */
+label{
+  font-size: 12px;
+  font-weight: 850;
+  color: rgba(15,23,42,.72);
+  display:block;
+  margin: 10px 0 6px;
 }
 
-/* ultra narrow: hide first pill in topbar if needed */
-@media (max-width: 360px){
-  .topActions .pill:first-child{display:none;}
-}
-/* ===============================
-   MULTISELECT + BARVY OTÁZEK (override)
-   vlož na KONEC styles.css
-================================== */
-
-/* 1) Barevné odlišení typů otázek (celé okno otázky) */
-.q[data-qtype="checkbox"]{
-  background: rgba(59,130,246,.10);           /* světle modrá */
-  border-color: rgba(59,130,246,.20);
-}
-.q[data-qtype="furniture_trigger"]{
-  background: rgba(168,85,247,.10);           /* světle fialová */
-  border-color: rgba(168,85,247,.20);
-}
-.q[data-qtype="photo"]{
-  background: rgba(148,163,184,.14);          /* šedá */
-  border-color: rgba(148,163,184,.22);
+/* File input polish */
+input[type="file"]{
+  width: 100%;
+  border-radius: var(--radius-sm);
+  border: 1px dashed rgba(15,23,42,.18);
+  background: rgba(255,255,255,.70);
+  padding: 10px 12px;
 }
 
-/* 2) Multiselect – šipka barvy (zavřeno = modrá, otevřeno = fialová) */
-.q[data-qtype="select"][data-multi="1"] button[data-mstoggle]{
-  color: #2563eb;                              /* modrá */
-  border-color: rgba(37,99,235,.35);
-}
-.q[data-qtype="select"][data-multi="1"] button[data-mstoggle][aria-expanded="true"]{
-  color: #7c3aed;                              /* fialová */
-  border-color: rgba(124,58,237,.35);
+/* Better spacing between sections on visit */
+.card > .q:first-of-type{ margin-top: 10px; }
+
+/* Mobile tweaks */
+@media (max-width: 420px){
+  #app, #main{ padding: 12px 10px 90px; }
+  .photoGrid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .btn{ padding: 10px 12px; }
 }
 
-/* 3) Multiselect – když je rozbalený, celé okno do žluta */
-.q[data-qtype="select"][data-multi="1"]:has(button[data-mstoggle][aria-expanded="true"]){
-  background: rgba(250,204,21,.16);            /* žlutá */
-  border-color: rgba(250,204,21,.30);
-}
-
-/* 4) Multiselect – tlačítko "Smazat filtr" oranžové
-   (funguje pokud má tlačítko class .msClear nebo data-msclear) */
-.q[data-qtype="select"][data-multi="1"] .msClear,
-.q[data-qtype="select"][data-multi="1"] button[data-msclear]{
-  background: rgba(249,115,22,.16);
-  border-color: rgba(249,115,22,.35);
-  color: #c2410c;
-  font-weight: 800;
-}
-.q[data-qtype="select"][data-multi="1"] .msClear:hover,
-.q[data-qtype="select"][data-multi="1"] button[data-msclear]:hover{
-  background: rgba(249,115,22,.22);
+/* Reduce motion a bit */
+@media (prefers-reduced-motion: reduce){
+  .btn{ transition: none; }
 }
