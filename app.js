@@ -9,7 +9,8 @@ const state = {
   deviceId: null,
   uiDate: null,
   drafts: new Map(),   // visitId -> draft
-  route: { name: "home", visitId: null }
+  route: { name: "home", visitId: null },
+  ui: { openMultiKey: null } // NEW: drží, která multiselect otázka je rozbalená
 };
 
 function $(sel){ return document.querySelector(sel); }
@@ -272,14 +273,14 @@ function evalCond(draft, condRaw){
 
   switch (cond.op) {
     case "eq":
-      if (Array.isArray(v)) return v.includes(cond.value); // multi-select: eq = obsahuje hodnotu
+      if (Array.isArray(v)) return v.includes(cond.value);
       return v === cond.value;
     case "neq":
       if (Array.isArray(v)) return !v.includes(cond.value);
       return v !== cond.value;
     case "in":
       if (!Array.isArray(cond.value)) return false;
-      if (Array.isArray(v)) return v.some(x => cond.value.includes(x)); // průnik
+      if (Array.isArray(v)) return v.some(x => cond.value.includes(x));
       return cond.value.includes(v);
     case "truthy":
       if (Array.isArray(v)) return v.length > 0;
@@ -514,37 +515,55 @@ function checkboxButtons(key, selected){
   `;
 }
 
-/* --- NEW: multi select renderer (checkbox chips) --- */
+/* --- UPDATED: multi select renderer (collapsible) --- */
 function renderMultiSelectQuestion(q, draft){
   const key = q.key;
   const opts = q.options || [];
   const cur = draft.answers?.[key];
   const selected = Array.isArray(cur) ? cur : [];
 
+  const isOpen = state.ui.openMultiKey === key;
+  const arrow = isOpen ? "▲" : "▼";
+  const countPill = selected.length ? `<span class="pill ok">${selected.length} vybráno</span>` : `<span class="pill">0 vybráno</span>`;
+
+  const summary = selected.length
+    ? `<div class="small" style="margin-top:6px;opacity:.95">${selected.slice(0,4).map(esc).join(", ")}${selected.length>4 ? ` +${selected.length-4}` : ""}</div>`
+    : ``;
+
   return `
     <div class="q" data-qtype="select" data-qkey="${esc(key)}" data-multi="1">
-      <div class="ql">${esc(q.label)} ${q.required ? `<span class="req">*</span>` : ""}</div>
-      ${q.help ? `<div class="small">${esc(q.help)}</div>` : ""}
+      <div class="row" style="align-items:center;gap:10px">
+        <div style="flex:1;min-width:200px">
+          <div class="ql" style="margin:0">${esc(q.label)} ${q.required ? `<span class="req">*</span>` : ""}</div>
+          ${q.help ? `<div class="small">${esc(q.help)}</div>` : ""}
+          ${summary}
+        </div>
+
+        ${countPill}
+        <button class="btn ghost" data-mstoggle="${esc(key)}" aria-expanded="${isOpen}" style="min-width:44px">
+          ${arrow}
+        </button>
+      </div>
 
       <div class="hr"></div>
 
-      <div class="row" style="flex-wrap:wrap;gap:10px">
-        ${opts.map(o => {
-          const isOn = selected.includes(o);
-          return `
-            <label class="pill ${isOn ? "ok" : ""}" style="cursor:pointer;user-select:none">
-              <input type="checkbox"
-                     data-msopt="1"
-                     data-qkey="${esc(key)}"
-                     value="${esc(o)}"
-                     ${isOn ? "checked" : ""} />
-              <span style="margin-left:8px">${esc(o)}</span>
-            </label>
-          `;
-        }).join("")}
+      <div class="msBody" style="${isOpen ? "" : "display:none;"}">
+        <div class="row" style="flex-wrap:wrap;gap:10px">
+          ${opts.map(o => {
+            const isOn = selected.includes(o);
+            return `
+              <label class="pill ${isOn ? "ok" : ""}" style="cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:8px">
+                <input type="checkbox"
+                       data-msopt="1"
+                       data-qkey="${esc(key)}"
+                       value="${esc(o)}"
+                       ${isOn ? "checked" : ""} />
+                <span>${esc(o)}</span>
+              </label>
+            `;
+          }).join("")}
+        </div>
       </div>
-
-      <div class="small">Vybráno: <b>${selected.length}</b></div>
     </div>
   `;
 }
@@ -649,7 +668,7 @@ function renderFurnitureObs(o, rules){
       <input class="inp" data-obsfield="atypLabel" data-obsid="${esc(o.id)}" value="${esc(o.atypLabel || "")}" />
 
       <label>Popis ${rules.requireDescription ? `<span class="req">*</span>` : ""}</label>
-      <textarea data-obsfield="description" data-obsid="${esc(o.id)}">${esc(o.description || "")}</textarea>
+      <textarea data-obsfield="description" data-obsid="${esc(o.description || "")}">${esc(o.description || "")}</textarea>
 
       ${rules.allowMultiple ? `
         <label>Množství <span class="req">*</span></label>
@@ -928,11 +947,21 @@ function bindEvents(){
     if (nav){
       const target = nav.getAttribute("data-nav");
       state.route = { name: "home", visitId: null };
+      state.ui.openMultiKey = null; // reset otevřený multiselect mimo visit
       render();
       requestAnimationFrame(() => {
         const el = document.querySelector(target === "visits" ? "#visitsPanel" : "#jobpackPanel");
         el?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
+      return;
+    }
+
+    // NEW: toggle multiselect accordion (only one open)
+    const msToggle = t.closest("[data-mstoggle]");
+    if (msToggle){
+      const key = msToggle.getAttribute("data-mstoggle");
+      state.ui.openMultiKey = (state.ui.openMultiKey === key) ? null : key;
+      render();
       return;
     }
 
@@ -964,6 +993,7 @@ function bindEvents(){
     if (open){
       const visitId = open.getAttribute("data-open");
       state.route = { name: "visit", visitId };
+      state.ui.openMultiKey = null; // začínáme s čistým stavem
       render();
       return;
     }
@@ -1125,6 +1155,7 @@ function bindEvents(){
       await saveDraft(d);
 
       state.route = { name: "home", visitId: null };
+      state.ui.openMultiKey = null;
       render();
       return;
     }
@@ -1142,6 +1173,7 @@ function bindEvents(){
       await saveDraft(d);
 
       state.route = { name: "home", visitId: null };
+      state.ui.openMultiKey = null;
       render();
       return;
     }
@@ -1156,7 +1188,7 @@ function bindEvents(){
       return;
     }
 
-    // --- NEW: multi-select toggles ---
+    // multi-select checkbox toggles
     if (t.matches('input[data-msopt="1"]')){
       const key = t.getAttribute("data-qkey");
       const opt = t.value;
@@ -1211,8 +1243,8 @@ function bindEvents(){
       await saveDraft(d);
       return;
     }
-    // single select only; multi je řešený přes data-msopt výš
     if (type === "select"){
+      // single select only; multi je handled výš
       if (q.getAttribute("data-multi") === "1") return;
       d.answers[key] = t.value || "";
       await saveDraft(d);
