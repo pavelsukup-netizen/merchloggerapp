@@ -166,6 +166,15 @@ body{
   height:100%;
   cursor:pointer;
 }
+.iconBtn .icon{
+  position: relative;
+  z-index: 1;
+  pointer-events: none; /* klik vždy projde na input */
+}
+
+#dayPicker{
+  z-index: 2;           /* input je overlay “nahoře” */
+}
 
 /* =========================
    Panels & Cards
