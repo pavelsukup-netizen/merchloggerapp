@@ -991,6 +991,19 @@ async function exportDayZip(date){
 function bindEvents(){
   document.onclick = async (e) => {
     const t = e.target;
+    // otevři date picker na klik ikonky (a popup se ukáže ve viewportu)
+    if (t.closest("#btnCalendar")){
+      const dp = document.querySelector("#dayPicker");
+      if (dp){
+        // nastav aktuální datum, ať picker ukáže správný den
+        dp.value = state.uiDate || todayLocal();
+
+        // Chromium: showPicker() otevře nativní dialog
+        if (typeof dp.showPicker === "function") dp.showPicker();
+        else dp.click(); // fallback
+      }
+      return;
+    }
 
     const nav = t.closest("[data-nav]");
     if (nav){
