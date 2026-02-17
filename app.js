@@ -10,9 +10,11 @@ const state = {
   uiDate: null,
   drafts: new Map(),   // visitId -> draft
   route: { name: "home", visitId: null },
+
+  // UI state
   ui: {
-    openMultiKey: null,          // drží, která multiselect otázka je rozbalená
-    multiFilter: Object.create(null) // NEW: key -> string (filtr pro každou multiselect otázku zvlášť)
+    openMultiKey: null,    // která multiselect otázka je rozbalená
+    msFilter: {}           // key -> string (filtr pro každou multiselect otázku)
   }
 };
 
@@ -304,14 +306,9 @@ function evalCond(draft, condRaw){
 
 function isQuestionForPartner(draft, q){
   const ids = q?.partnerIds;
-
-  // když partnerIds není pole nebo je prázdné => otázka je pro všechny
   if (!Array.isArray(ids) || ids.length === 0) return true;
-
-  // retailerId bereme z draftu (už ho tam dáváš v ensureDraft)
   const rid = draft?.retailerId || "";
-  if (!rid) return false; // když nevíme retailer, radši otázku skryjeme
-
+  if (!rid) return false;
   return ids.includes(rid);
 }
 
@@ -375,6 +372,28 @@ function syncTopbarDate(date){
   if (pill) pill.textContent = (date || "—").split("-").reverse().join(". ");
 }
 
+/* ----------------- Multiselect local filtering (NO render) ----------------- */
+function applyMsFilter(key){
+  const qEl = document.querySelector(`.q[data-multi="1"][data-qkey="${CSS.escape(key)}"]`);
+  if (!qEl) return;
+
+  const needle = (state.ui.msFilter?.[key] ?? "").trim().toLowerCase();
+  const items = qEl.querySelectorAll('[data-msitem="1"]');
+  let visible = 0;
+
+  items.forEach(el => {
+    const label = el.getAttribute("data-mslabel") || "";
+    const show = !needle || label.includes(needle);
+    el.style.display = show ? "" : "none";
+    if (show) visible++;
+  });
+
+  const pill = qEl.querySelector(`[data-mscount="${CSS.escape(key)}"]`);
+  if (pill){
+    pill.textContent = `${visible}/${items.length}`;
+  }
+}
+
 /* ----------------- render ----------------- */
 function render(){
   const root = rootEl();
@@ -414,6 +433,12 @@ function render(){
 
     hydratePhotoThumbs().catch(()=>{});
     bindEvents();
+
+    // po renderu: pokud je otevřený multiselect, aplikuj filtr + spočítej visible
+    if (state.ui.openMultiKey){
+      requestAnimationFrame(() => applyMsFilter(state.ui.openMultiKey));
+    }
+
     return;
   }
 
@@ -536,9 +561,7 @@ function checkboxButtons(key, selected){
   `;
 }
 
-function normStr(s){ return String(s ?? "").toLowerCase(); }
-
-/* --- UPDATED: multi select renderer (collapsible + search filter) --- */
+/* --- UPDATED: multi select renderer (collapsible + search) --- */
 function renderMultiSelectQuestion(q, draft){
   const key = q.key;
   const opts = q.options || [];
@@ -553,11 +576,7 @@ function renderMultiSelectQuestion(q, draft){
     ? `<div class="small" style="margin-top:6px;opacity:.95">${selected.slice(0,4).map(esc).join(", ")}${selected.length>4 ? ` +${selected.length-4}` : ""}</div>`
     : ``;
 
-  const filterVal = state.ui.multiFilter[key] ?? "";
-  const f = normStr(filterVal).trim();
-  const visibleOpts = f
-    ? opts.filter(o => normStr(o).includes(f))
-    : opts;
+  const filterVal = (state.ui.msFilter?.[key] ?? "");
 
   return `
     <div class="q" data-qtype="select" data-qkey="${esc(key)}" data-multi="1">
@@ -569,38 +588,38 @@ function renderMultiSelectQuestion(q, draft){
         </div>
 
         ${countPill}
-        <button class="btn ghost"
-        data-mstoggle="${esc(key)}"
-        aria-expanded="${isOpen}"
-        style="
-          min-width:44px;
-          background:${isOpen ? '#a78bfa' : '#60a5fa'};
-          color:#0b1220;
-          border:1px solid rgba(15,23,42,.12);
-        ">
-  ${arrow}
-</button>
+        <button class="btn ghost" data-mstoggle="${esc(key)}" aria-expanded="${isOpen}" style="min-width:44px" type="button">
+          ${arrow}
+        </button>
       </div>
 
       <div class="hr"></div>
 
       <div class="msBody" style="${isOpen ? "" : "display:none;"}">
-        <div class="row" style="gap:10px;align-items:center;flex-wrap:wrap">
+        <div class="row" style="gap:10px;margin-bottom:10px">
           <input class="inp"
                  type="text"
-                 placeholder="Hledat…"
+                 inputmode="search"
+                 autocomplete="off"
+                 autocorrect="off"
+                 autocapitalize="off"
+                 spellcheck="false"
+                 placeholder="Hledat..."
                  value="${esc(filterVal)}"
-                 data-msfilter="${esc(key)}"
-                 style="flex:1;min-width:180px" />
-          <button class="btn ghost" data-msclear="${esc(key)}">Smazat filtr</button>
-          <span class="pill">${visibleOpts.length}/${opts.length}</span>
+                 data-mssearch="1"
+                 data-qkey="${esc(key)}" />
+          <button class="btn orange" data-msclear="${esc(key)}" type="button">Smazat filtr</button>
+          <span class="pill" data-mscount="${esc(key)}">—</span>
         </div>
 
-        <div class="row" style="flex-wrap:wrap;gap:10px;margin-top:10px">
-          ${visibleOpts.map(o => {
+        <div class="row" style="flex-wrap:wrap;gap:10px" data-mslist="${esc(key)}">
+          ${opts.map(o => {
             const isOn = selected.includes(o);
             return `
-              <label class="pill ${isOn ? "ok" : ""}" style="cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:8px">
+              <label class="pill ${isOn ? "ok" : ""}"
+                     style="cursor:pointer;user-select:none;display:inline-flex;align-items:center;gap:8px"
+                     data-msitem="1"
+                     data-mslabel="${esc(String(o).toLowerCase())}">
                 <input type="checkbox"
                        data-msopt="1"
                        data-qkey="${esc(key)}"
@@ -634,7 +653,7 @@ function renderPhotoQuestion(q, draft){
 
       <div class="row">
         <input class="inp" type="file" accept="image/*" multiple data-phinp="${esc(key)}" />
-        <button class="btn" data-phadd="${esc(key)}">Přidat fotky</button>
+        <button class="btn" data-phadd="${esc(key)}" type="button">Přidat fotky</button>
         <span class="pill">fotky: ${ids.length} / ${max}</span>
         <span class="pill">${min}-${max}</span>
       </div>
@@ -643,7 +662,7 @@ function renderPhotoQuestion(q, draft){
         ${ids.map(pid => `
           <div class="ph" data-phid="${esc(pid)}">
             <img alt="${esc(pid)}" src="" />
-            <button class="btn ghost" data-phrm="${esc(pid)}" data-qkey="${esc(key)}">✕</button>
+            <button class="btn ghost" data-phrm="${esc(pid)}" data-qkey="${esc(key)}" type="button">✕</button>
           </div>
         `).join("")}
       </div>
@@ -686,7 +705,7 @@ function renderFurnitureTrigger(q, draft){
           <span class="pill">${photosMin}-${photosMax} fotek</span>
           ${requireDescription ? `<span class="pill bad">popis povinný</span>` : `<span class="pill">popis volitelný</span>`}
           <span class="spacer"></span>
-          <button class="btn ok" data-addobs="${esc(key)}" ${canAddObs ? "" : "disabled"}>Přidat záznam</button>
+          <button class="btn ok" data-addobs="${esc(key)}" ${canAddObs ? "" : "disabled"} type="button">Přidat záznam</button>
         </div>
 
         <div class="list">
@@ -709,7 +728,7 @@ function renderFurnitureObs(o, rules){
         <span class="pill">fotky: ${esc(photosCount)}</span>
         <span class="pill">${esc(rules.photosMin)}-${esc(rules.photosMax)}</span>
         <span class="spacer"></span>
-        <button class="btn ghost" data-delobs="${esc(o.id)}">Smazat</button>
+        <button class="btn ghost" data-delobs="${esc(o.id)}" type="button">Smazat</button>
       </div>
 
       <label>Název (atypLabel)</label>
@@ -726,14 +745,14 @@ function renderFurnitureObs(o, rules){
       <div class="hr"></div>
       <div class="row">
         <input class="inp" type="file" accept="image/*" multiple data-obsphinp="${esc(o.id)}"/>
-        <button class="btn" data-obsphadd="${esc(o.id)}">Přidat fotky</button>
+        <button class="btn" data-obsphadd="${esc(o.id)}" type="button">Přidat fotky</button>
       </div>
 
       <div class="photoGrid">
         ${(o.photoIds||[]).map(pid => `
           <div class="ph" data-phid="${esc(pid)}">
             <img alt="${esc(pid)}" src="" />
-            <button class="btn ghost" data-obsphrm="${esc(pid)}" data-obsid="${esc(o.id)}">✕</button>
+            <button class="btn ghost" data-obsphrm="${esc(pid)}" data-obsid="${esc(o.id)}" type="button">✕</button>
           </div>
         `).join("")}
       </div>
@@ -770,6 +789,23 @@ function renderQuestion(q, draft){
   }
 
   if (q.type === "number"){
+    const num = (typeof val === "number" && Number.isFinite(val)) ? val : 0;
+    const isCounter = (q.counter === true) || (q.stepper === true);
+
+    if (isCounter){
+      return `
+        <div class="q" data-qtype="number" data-qkey="${esc(key)}" data-counter="1">
+          <div class="ql">${esc(q.label)} ${req}</div>
+          ${help}
+          <div class="row" style="gap:10px;flex-wrap:nowrap">
+            <button class="btn ghost" type="button" data-stepminus="${esc(key)}" aria-label="Snížit">−</button>
+            <input class="inp" type="number" value="${esc(String(num))}" style="text-align:center" />
+            <button class="btn ghost" type="button" data-stepplus="${esc(key)}" aria-label="Zvýšit">+</button>
+          </div>
+        </div>
+      `;
+    }
+
     return `
       <div class="q" data-qtype="number" data-qkey="${esc(key)}">
         <div class="ql">${esc(q.label)} ${req}</div>
@@ -832,6 +868,7 @@ function validateDraftBeforeDone(draft){
   for (const q of qs){
     if (!isQuestionForPartner(draft, q)) continue;
     if (!isQuestionActive(draft, q)) continue;
+
     const key = q.key;
     const v = draft.answers?.[key];
 
@@ -989,61 +1026,51 @@ async function exportDayZip(date){
 
 /* ----------------- events ----------------- */
 function bindEvents(){
+  // click handlers
   document.onclick = async (e) => {
     const t = e.target;
-    // otevři date picker na klik ikonky (a popup se ukáže ve viewportu)
-    if (t.closest("#btnCalendar")){
-      const dp = document.querySelector("#dayPicker");
-      if (dp){
-        // nastav aktuální datum, ať picker ukáže správný den
-        dp.value = state.uiDate || todayLocal();
-
-        // Chromium: showPicker() otevře nativní dialog
-        if (typeof dp.showPicker === "function") dp.showPicker();
-        else dp.click(); // fallback
-      }
-      return;
-    }
 
     const nav = t.closest("[data-nav]");
     if (nav){
-      const target = nav.getAttribute("data-nav");
       state.route = { name: "home", visitId: null };
-      state.ui.openMultiKey = null; // reset otevřený multiselect mimo visit
+      state.ui.openMultiKey = null;
       render();
-      requestAnimationFrame(() => {
-        const el = document.querySelector(target === "visits" ? "#visitsPanel" : "#jobpackPanel");
-        el?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
       return;
     }
 
-    // toggle multiselect accordion (only one open)
+    // Toggle multiselect accordion (only one open)
     const msToggle = t.closest("[data-mstoggle]");
     if (msToggle){
       const key = msToggle.getAttribute("data-mstoggle");
       state.ui.openMultiKey = (state.ui.openMultiKey === key) ? null : key;
       render();
-      // po renderu vrať fokus do inputu filtru (pokud existuje a je otevřeno)
+
       requestAnimationFrame(() => {
-        const inp = document.querySelector(`input[data-msfilter="${CSS.escape(key)}"]`);
-        inp?.focus?.();
+        if (state.ui.openMultiKey){
+          applyMsFilter(key);
+          const inp = document.querySelector(`input[data-mssearch="1"][data-qkey="${CSS.escape(key)}"]`);
+          inp?.focus();
+          try { inp?.setSelectionRange(inp.value.length, inp.value.length); } catch {}
+        }
       });
+
       return;
     }
 
-    // NEW: clear multiselect filter
+    // Clear multiselect filter - NO render
     const msClear = t.closest("[data-msclear]");
     if (msClear){
       const key = msClear.getAttribute("data-msclear");
-      if (key){
-        state.ui.multiFilter[key] = "";
-        render();
-        requestAnimationFrame(() => {
-          const inp = document.querySelector(`input[data-msfilter="${CSS.escape(key)}"]`);
-          if (inp){ inp.focus(); }
-        });
-      }
+      if (!key) return;
+
+      state.ui.msFilter[key] = "";
+
+      const qEl = document.querySelector(`.q[data-multi="1"][data-qkey="${CSS.escape(key)}"]`);
+      const inp = qEl?.querySelector(`input[data-mssearch="1"][data-qkey="${CSS.escape(key)}"]`);
+      if (inp) inp.value = "";
+
+      applyMsFilter(key);
+      inp?.focus();
       return;
     }
 
@@ -1075,7 +1102,7 @@ function bindEvents(){
     if (open){
       const visitId = open.getAttribute("data-open");
       state.route = { name: "visit", visitId };
-      state.ui.openMultiKey = null; // začínáme s čistým stavem
+      state.ui.openMultiKey = null;
       render();
       return;
     }
@@ -1091,6 +1118,44 @@ function bindEvents(){
       d.answers[key] = val;
       await saveDraft(d);
       render();
+      return;
+    }
+
+    // Counter - minus
+    const stepMinus = t.closest("[data-stepminus]");
+    if (stepMinus){
+      const key = stepMinus.getAttribute("data-stepminus");
+      const visitId = state.route.visitId;
+      const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
+      if (!visit || !key) return;
+
+      const d = ensureDraft(visit);
+      const cur = Number(d.answers?.[key] ?? 0);
+      d.answers[key] = Math.max(0, cur - 1);
+      await saveDraft(d);
+
+      const qEl = document.querySelector(`.q[data-qtype="number"][data-qkey="${CSS.escape(key)}"]`);
+      const inp = qEl?.querySelector('input[type="number"]');
+      if (inp) inp.value = String(d.answers[key]);
+      return;
+    }
+
+    // Counter - plus
+    const stepPlus = t.closest("[data-stepplus]");
+    if (stepPlus){
+      const key = stepPlus.getAttribute("data-stepplus");
+      const visitId = state.route.visitId;
+      const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
+      if (!visit || !key) return;
+
+      const d = ensureDraft(visit);
+      const cur = Number(d.answers?.[key] ?? 0);
+      d.answers[key] = cur + 1;
+      await saveDraft(d);
+
+      const qEl = document.querySelector(`.q[data-qtype="number"][data-qkey="${CSS.escape(key)}"]`);
+      const inp = qEl?.querySelector('input[type="number"]');
+      if (inp) inp.value = String(d.answers[key]);
       return;
     }
 
@@ -1261,27 +1326,7 @@ function bindEvents(){
     }
   };
 
-  // NEW: input handler pro filtr (rychlejší než onchange)
-  document.oninput = (e) => {
-    const t = e.target;
-
-    if (t && t.matches('input[data-msfilter]')){
-      const key = t.getAttribute("data-msfilter");
-      state.ui.multiFilter[key] = t.value ?? "";
-      render();
-
-      // vrať fokus a kurzor na konec, ať se to dá psát bez vzteku
-      requestAnimationFrame(() => {
-        const inp = document.querySelector(`input[data-msfilter="${CSS.escape(key)}"]`);
-        if (inp){
-          const pos = inp.value.length;
-          inp.focus();
-          try { inp.setSelectionRange(pos, pos); } catch {}
-        }
-      });
-    }
-  };
-
+  // change handlers (persist answers)
   document.onchange = async (e) => {
     const t = e.target;
 
@@ -1311,7 +1356,14 @@ function bindEvents(){
 
       d.answers[key] = next;
       await saveDraft(d);
-      render();
+
+      // žádný render — jen přepočítej visible count (filtr) když je otevřený
+      if (state.ui.openMultiKey === key){
+        applyMsFilter(key);
+      } else {
+        // fallback: render summary/count pill
+        render();
+      }
       return;
     }
 
@@ -1341,13 +1393,13 @@ function bindEvents(){
 
     if (type === "text"){ d.answers[key] = t.value ?? ""; await saveDraft(d); return; }
     if (type === "number"){
+      // u counteru input ručně přepisovat jde, ale nebudeme renderovat — jen uložit
       const v = t.value;
       d.answers[key] = (v === "" ? null : Number(v));
       await saveDraft(d);
       return;
     }
     if (type === "select"){
-      // single select only; multi je handled výš
       if (q.getAttribute("data-multi") === "1") return;
       d.answers[key] = t.value || "";
       await saveDraft(d);
@@ -1367,6 +1419,21 @@ function bindEvents(){
         obs[field] = t.value ?? "";
       }
       await saveDraft(d);
+      return;
+    }
+  };
+
+  // input handlers (NO render) — multiselect search
+  document.oninput = (e) => {
+    const t = e.target;
+    if (!t) return;
+
+    if (t.matches('input[data-mssearch="1"]')){
+      const key = t.getAttribute("data-qkey");
+      if (!key) return;
+
+      state.ui.msFilter[key] = t.value ?? "";
+      applyMsFilter(key);
       return;
     }
   };
@@ -1400,5 +1467,6 @@ async function boot(){
   await updateSWBadge().catch(()=>{});
 
   render();
+  bindEvents();
 }
 boot();
