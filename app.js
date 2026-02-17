@@ -406,7 +406,7 @@ function render(){
     const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
     if (!visit){
       root.innerHTML = `<div class="card"><h2>Visit nenalezena</h2><button class="btn" data-nav="home">Zpět</button></div>`;
-      bindEvents();
+      ;
       return;
     }
     const draft = ensureDraft(visit);
@@ -432,7 +432,7 @@ function render(){
     `;
 
     hydratePhotoThumbs().catch(()=>{});
-    bindEvents();
+    ;
 
     // po renderu: pokud je otevřený multiselect, aplikuj filtr + spočítej visible
     if (state.ui.openMultiKey){
@@ -1029,6 +1029,18 @@ function bindEvents(){
   // click handlers
   document.onclick = async (e) => {
     const t = e.target;
+// FIX: klik na kalendář ikonku musí otevřít date picker i po rerenderech
+const calLabel = t.closest('label.iconBtn');
+if (calLabel && calLabel.querySelector('#dayPicker')){
+  const dp = calLabel.querySelector('#dayPicker');
+  // Chrome/Edge
+  if (typeof dp.showPicker === "function") dp.showPicker();
+  else {
+    dp.focus();
+    dp.click();
+  }
+  return;
+}
 
     const nav = t.closest("[data-nav]");
     if (nav){
