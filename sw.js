@@ -1,6 +1,6 @@
-const SW_VERSION = "2026-02-37";
+const SW_VERSION = "2026-02-38";
 // sw.js — cache + offline. BUMP VER při každé změně souborů.
-const CACHE = "mv_mobile_logger_v37";
+const CACHE = "mv_mobile_logger_v38";
 
 const ASSETS = [
   "./",
@@ -30,7 +30,6 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const req = event.request;
-  const url = new URL(req.url);
 
   // Network-first pro HTML (ať bere update), cache-first pro ostatní
   const isHTML = req.headers.get("accept")?.includes("text/html");
@@ -62,6 +61,8 @@ self.addEventListener("fetch", (event) => {
       return new Response("Offline", { status: 503 });
     }
   })());
+}); // ✅ TADY chybělo uzavření fetch listeneru
+
 self.addEventListener("message", (event) => {
   if (event.data?.type === "GET_VERSION") {
     // když přijde MessageChannel port, odpověz tam
@@ -73,4 +74,3 @@ self.addEventListener("message", (event) => {
     event.source?.postMessage?.({ version: SW_VERSION });
   }
 });
-
