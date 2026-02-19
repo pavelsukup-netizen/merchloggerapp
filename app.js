@@ -13,9 +13,9 @@ const state = {
 
   // UI state
   ui: {
-    openMultiKey: null,    // která multiselect otázka je rozbalená
+    openMultiKey: null,     // která multiselect otázka je rozbalená
     msFilter: {},           // key -> string (filtr multiselectu)
-  collapsedQ: {}          // key -> true (sbalené otázky)
+    collapsedQ: {}          // key -> true (sbalené otázky)
   }
 };
 
@@ -383,7 +383,7 @@ function applyMsFilter(key){
   let visible = 0;
 
   items.forEach(el => {
-    const label = el.getAttribute("data-mslabel") || "";
+    const label = (el.getAttribute("data-mslabel") || "");
     const show = !needle || label.includes(needle);
     el.style.display = show ? "" : "none";
     if (show) visible++;
@@ -407,7 +407,6 @@ function render(){
     const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
     if (!visit){
       root.innerHTML = `<div class="card"><h2>Visit nenalezena</h2><button class="btn" data-nav="home">Zpět</button></div>`;
-      ;
       return;
     }
     const draft = ensureDraft(visit);
@@ -422,9 +421,9 @@ function render(){
           <span class="pill">${esc(tpl?.name || visit.templateId)}</span>
           <span class="pill warn">${esc(draft.status)}</span>
           <span class="spacer"></span>
-          <button class="btn ghost" data-nav="home">Zpět</button>
-          <button class="btn bad" data-cancelvisit="${esc(visit.visitId)}">Zrušit</button>
-          <button class="btn ok" data-done="${esc(visit.visitId)}">Dokončit</button>
+          <button class="btn ghost" type="button" data-nav="home">Zpět</button>
+          <button class="btn bad" type="button" data-cancelvisit="${esc(visit.visitId)}">Zrušit</button>
+          <button class="btn ok" type="button" data-done="${esc(visit.visitId)}">Dokončit</button>
         </div>
         <p class="small">visitId: ${esc(visit.visitId)}</p>
       </div>
@@ -433,7 +432,6 @@ function render(){
     `;
 
     hydratePhotoThumbs().catch(()=>{});
-    ;
 
     // po renderu: pokud je otevřený multiselect, aplikuj filtr + spočítej visible
     if (state.ui.openMultiKey){
@@ -469,8 +467,8 @@ function render(){
         </div>
 
         <div class="row" style="margin-top:12px">
-          <button class="btn primary" id="btnImport">Import</button>
-          <button class="btn ok" id="btnExport" ${state.pack ? "" : "disabled"}>Export denního ZIP</button>
+          <button class="btn primary" type="button" id="btnImport">Import</button>
+          <button class="btn ok" type="button" id="btnExport" ${state.pack ? "" : "disabled"}>Export denního ZIP</button>
         </div>
 
         <div class="small" style="margin-top:10px; opacity:.9">
@@ -486,8 +484,6 @@ function render(){
       </div>
     </div>
   `;
-
-  bindEvents();
 }
 
 function renderVisits(date){
@@ -516,7 +512,7 @@ function renderVisits(date){
               <span class="pill">${esc(tpl?.name || v.templateId)}</span>
               <span class="pill ${cls}">${esc(label)}</span>
               <span class="spacer"></span>
-              <button class="btn" data-open="${esc(v.visitId)}">${dr ? "Pokračovat" : "Začít"}</button>
+              <button class="btn" type="button" data-open="${esc(v.visitId)}">${dr ? "Pokračovat" : "Začít"}</button>
             </div>
             <div class="meta">visitId: ${esc(v.visitId)}</div>
           </div>
@@ -556,13 +552,13 @@ function checkboxButtons(key, selected){
 
   return `
     <div class="row">
-      <button class="btn ok" data-bool="true" data-qkey="${esc(key)}" aria-pressed="${yesSel}" ${yesStyle}>ANO</button>
-      <button class="btn bad" data-bool="false" data-qkey="${esc(key)}" aria-pressed="${noSel}" ${noStyle}>NE</button>
+      <button class="btn ok" type="button" data-bool="true" data-qkey="${esc(key)}" aria-pressed="${yesSel}" ${yesStyle}>ANO</button>
+      <button class="btn bad" type="button" data-bool="false" data-qkey="${esc(key)}" aria-pressed="${noSel}" ${noStyle}>NE</button>
     </div>
   `;
 }
 
-/* --- UPDATED: multi select renderer (collapsible + search) --- */
+/* --- multi select renderer (collapsible + search) --- */
 function renderMultiSelectQuestion(q, draft){
   const key = q.key;
   const opts = q.options || [];
@@ -589,7 +585,7 @@ function renderMultiSelectQuestion(q, draft){
         </div>
 
         ${countPill}
-        <button class="btn ghost" data-mstoggle="${esc(key)}" aria-expanded="${isOpen}" style="min-width:44px" type="button">
+        <button class="btn ghost" type="button" data-mstoggle="${esc(key)}" aria-expanded="${isOpen}" style="min-width:44px">
           ${arrow}
         </button>
       </div>
@@ -609,7 +605,7 @@ function renderMultiSelectQuestion(q, draft){
                  value="${esc(filterVal)}"
                  data-mssearch="1"
                  data-qkey="${esc(key)}" />
-          <button class="btn orange" data-msclear="${esc(key)}" type="button">Smazat filtr</button>
+          <button class="btn orange" type="button" data-msclear="${esc(key)}">Smazat filtr</button>
           <span class="pill" data-mscount="${esc(key)}">—</span>
         </div>
 
@@ -654,7 +650,7 @@ function renderPhotoQuestion(q, draft){
 
       <div class="row">
         <input class="inp" type="file" accept="image/*" multiple data-phinp="${esc(key)}" />
-        <button class="btn" data-phadd="${esc(key)}" type="button">Přidat fotky</button>
+        <button class="btn" type="button" data-phadd="${esc(key)}">Přidat fotky</button>
         <span class="pill">fotky: ${ids.length} / ${max}</span>
         <span class="pill">${min}-${max}</span>
       </div>
@@ -663,7 +659,7 @@ function renderPhotoQuestion(q, draft){
         ${ids.map(pid => `
           <div class="ph" data-phid="${esc(pid)}">
             <img alt="${esc(pid)}" src="" />
-            <button class="btn ghost" data-phrm="${esc(pid)}" data-qkey="${esc(key)}" type="button">✕</button>
+            <button class="btn ghost" type="button" data-phrm="${esc(pid)}" data-qkey="${esc(key)}">✕</button>
           </div>
         `).join("")}
       </div>
@@ -706,7 +702,7 @@ function renderFurnitureTrigger(q, draft){
           <span class="pill">${photosMin}-${photosMax} fotek</span>
           ${requireDescription ? `<span class="pill bad">popis povinný</span>` : `<span class="pill">popis volitelný</span>`}
           <span class="spacer"></span>
-          <button class="btn ok" data-addobs="${esc(key)}" ${canAddObs ? "" : "disabled"} type="button">Přidat záznam</button>
+          <button class="btn ok" type="button" data-addobs="${esc(key)}" ${canAddObs ? "" : "disabled"}>Přidat záznam</button>
         </div>
 
         <div class="list">
@@ -729,7 +725,7 @@ function renderFurnitureObs(o, rules){
         <span class="pill">fotky: ${esc(photosCount)}</span>
         <span class="pill">${esc(rules.photosMin)}-${esc(rules.photosMax)}</span>
         <span class="spacer"></span>
-        <button class="btn ghost" data-delobs="${esc(o.id)}" type="button">Smazat</button>
+        <button class="btn ghost" type="button" data-delobs="${esc(o.id)}">Smazat</button>
       </div>
 
       <label>Název (atypLabel)</label>
@@ -746,14 +742,14 @@ function renderFurnitureObs(o, rules){
       <div class="hr"></div>
       <div class="row">
         <input class="inp" type="file" accept="image/*" multiple data-obsphinp="${esc(o.id)}"/>
-        <button class="btn" data-obsphadd="${esc(o.id)}" type="button">Přidat fotky</button>
+        <button class="btn" type="button" data-obsphadd="${esc(o.id)}">Přidat fotky</button>
       </div>
 
       <div class="photoGrid">
         ${(o.photoIds||[]).map(pid => `
           <div class="ph" data-phid="${esc(pid)}">
             <img alt="${esc(pid)}" src="" />
-            <button class="btn ghost" data-obsphrm="${esc(pid)}" data-obsid="${esc(o.id)}" type="button">✕</button>
+            <button class="btn ghost" type="button" data-obsphrm="${esc(pid)}" data-obsid="${esc(o.id)}">✕</button>
           </div>
         `).join("")}
       </div>
@@ -767,10 +763,11 @@ function renderQuestion(q, draft){
 
   const req = q.required ? `<span class="req">*</span>` : "";
   const help = q.help ? `<div class="small">${esc(q.help)}</div>` : "";
-    const collapsed = !!(state.ui.collapsedQ && state.ui.collapsedQ[key]);
+
+  const collapsed = !!(state.ui.collapsedQ && state.ui.collapsedQ[key]);
   const chev = collapsed ? "▼" : "▲";
 
-  // Pozn.: multiselect už má vlastní toggle (mstoggle), takže tam tenhle wrapper nedáváme
+  // multiselect má vlastní toggle (mstoggle), takže ho neobalujeme
   function wrapNonMulti(innerHtml){
     return `
       <div class="q" data-qtype="${esc(q.type)}" data-qkey="${esc(key)}">
@@ -779,7 +776,7 @@ function renderQuestion(q, draft){
             <div class="ql" style="margin:0">${esc(q.label)} ${req}</div>
             ${help}
           </div>
-          <button class="btn ghost" data-qtoggle="${esc(key)}" aria-expanded="${!collapsed}" style="min-width:44px">
+          <button class="btn ghost" type="button" data-qtoggle="${esc(key)}" aria-expanded="${!collapsed}" style="min-width:44px">
             ${chev}
           </button>
         </div>
@@ -791,79 +788,64 @@ function renderQuestion(q, draft){
     `;
   }
 
-
   if (q.type === "checkbox"){
-  const selected = (val === true) ? true : (val === false ? false : null);
-
-  return wrapNonMulti(`
-    ${checkboxButtons(key, selected)}
-  `);
-}
-
-
+    const selected = (val === true) ? true : (val === false ? false : null);
+    return wrapNonMulti(`${checkboxButtons(key, selected)}`);
+  }
 
   if (q.type === "text"){
-  return wrapNonMulti(`
-    <textarea>${esc(typeof val === "string" ? val : "")}</textarea>
-  `);
-}
-
+    return wrapNonMulti(`
+      <textarea>${esc(typeof val === "string" ? val : "")}</textarea>
+    `);
+  }
 
   if (q.type === "number"){
     const num = (typeof val === "number" && Number.isFinite(val)) ? val : 0;
     const isCounter = (q.counter === true) || (q.stepper === true);
 
-      if (isCounter){
-    const collapsed = !!(state.ui.collapsedQ && state.ui.collapsedQ[key]);
-    const chev = collapsed ? "▼" : "▲";
-
-    return `
-      <div class="q" data-qtype="number" data-qkey="${esc(key)}" data-counter="1">
-        <div class="row" style="align-items:center;gap:10px">
-          <div style="flex:1;min-width:200px">
-            <div class="ql" style="margin:0">${esc(q.label)} ${req}</div>
-            ${help}
+    if (isCounter){
+      // counter má taky collapsible header (stejně jako ostatní)
+      return `
+        <div class="q" data-qtype="number" data-qkey="${esc(key)}" data-counter="1">
+          <div class="row" style="align-items:center;gap:10px">
+            <div style="flex:1;min-width:200px">
+              <div class="ql" style="margin:0">${esc(q.label)} ${req}</div>
+              ${help}
+            </div>
+            <button class="btn ghost" type="button" data-qtoggle="${esc(key)}" aria-expanded="${!collapsed}" style="min-width:44px">
+              ${chev}
+            </button>
           </div>
-          <button class="btn ghost" data-qtoggle="${esc(key)}" aria-expanded="${!collapsed}" style="min-width:44px">
-            ${chev}
-          </button>
-        </div>
 
-        <div class="qBody" style="${collapsed ? "display:none;" : ""}">
-          <div class="row" style="gap:10px;flex-wrap:nowrap">
-            <button class="btn ghost" type="button" data-stepminus="${esc(key)}" aria-label="Snížit">−</button>
-            <input class="inp" type="number" value="${esc(String(num))}" style="text-align:center" />
-            <button class="btn ghost" type="button" data-stepplus="${esc(key)}" aria-label="Zvýšit">+</button>
+          <div class="qBody" style="${collapsed ? "display:none;" : ""}">
+            <div class="row" style="gap:10px;flex-wrap:nowrap">
+              <button class="btn ghost" type="button" data-stepminus="${esc(key)}" aria-label="Snížit">−</button>
+              <input class="inp" type="number" min="0" inputmode="numeric" value="${esc(String(num))}" style="text-align:center" />
+              <button class="btn ghost" type="button" data-stepplus="${esc(key)}" aria-label="Zvýšit">+</button>
+            </div>
           </div>
         </div>
-      </div>
-    `;
-  }
+      `;
+    }
 
-
-    return `
-      <div class="q" data-qtype="number" data-qkey="${esc(key)}">
-        <div class="ql">${esc(q.label)} ${req}</div>
-        ${help}
-        <input class="inp" type="number" value="${esc(typeof val === "number" ? String(val) : "")}"/>
-      </div>
-    `;
+    return wrapNonMulti(`
+      <input class="inp" type="number" value="${esc(typeof val === "number" && Number.isFinite(val) ? String(val) : "")}"/>
+    `);
   }
 
   if (q.type === "select"){
-  if (q.multi === true) return renderMultiSelectQuestion(q, draft); // multiselect NEobalujeme
+    if (q.multi === true) return renderMultiSelectQuestion(q, draft);
 
-  const opts = q.options || [];
-  const v = typeof val === "string" ? val : "";
+    const opts = q.options || [];
+    const v = typeof val === "string" ? val : "";
 
-  return wrapNonMulti(`
-    <select class="inp">
-      <option value="">—</option>
-      ${opts.map(o => `<option value="${esc(o)}" ${o===v?"selected":""}>${esc(o)}</option>`).join("")}
-    </select>
-  `);
-}
-
+    return wrapNonMulti(`
+      <select class="inp">
+        <option value="">—</option>
+        ${opts.map(o => `<option value="${esc(o)}" ${o===v?"selected":""}>${esc(o)}</option>`).join("")}
+      </select>
+    `);
+  }
 
   if (q.type === "photo") return renderPhotoQuestion(q, draft);
   if (q.type === "furniture_trigger") return renderFurnitureTrigger(q, draft);
@@ -914,7 +896,9 @@ function validateDraftBeforeDone(draft){
       continue;
     }
     if (q.type === "number"){
-      if (q.required && (typeof v !== "number" || Number.isNaN(v))) errors.push(`Chybí číslo: ${q.label}`);
+      const isNum = (typeof v === "number" && Number.isFinite(v));
+      if (q.required && !isNum) errors.push(`Chybí číslo: ${q.label}`);
+      // 0 je validní => žádná "truthy" logika!
       continue;
     }
     if (q.type === "select"){
@@ -1062,18 +1046,28 @@ function bindEvents(){
   // click handlers
   document.onclick = async (e) => {
     const t = e.target;
-// FIX: klik na kalendář ikonku musí otevřít date picker i po rerenderech
-const calLabel = t.closest('label.iconBtn');
-if (calLabel && calLabel.querySelector('#dayPicker')){
-  const dp = calLabel.querySelector('#dayPicker');
-  // Chrome/Edge
-  if (typeof dp.showPicker === "function") dp.showPicker();
-  else {
-    dp.focus();
-    dp.click();
-  }
-  return;
-}
+
+    // FIX: klik na kalendář ikonku musí otevřít date picker i po rerenderech
+    const calLabel = t.closest('label.iconBtn');
+    if (calLabel && calLabel.querySelector('#dayPicker')){
+      const dp = calLabel.querySelector('#dayPicker');
+      if (typeof dp.showPicker === "function") dp.showPicker();
+      else { dp.focus(); dp.click(); }
+      return;
+    }
+
+    // Toggle sbalení otázky (non-multi + counter)
+    const qToggle = t.closest("[data-qtoggle]");
+    if (qToggle){
+      const key = qToggle.getAttribute("data-qtoggle");
+      if (!key) return;
+
+      state.ui.collapsedQ = state.ui.collapsedQ || {};
+      state.ui.collapsedQ[key] = !state.ui.collapsedQ[key];
+
+      render();
+      return;
+    }
 
     const nav = t.closest("[data-nav]");
     if (nav){
@@ -1097,22 +1091,7 @@ if (calLabel && calLabel.querySelector('#dayPicker')){
           inp?.focus();
           try { inp?.setSelectionRange(inp.value.length, inp.value.length); } catch {}
         }
-// toggle sbalení otázky (marketshare / counter / klidně i jiné)
-const qToggle = t.closest("[data-qtoggle]");
-if (qToggle){
-  const key = qToggle.getAttribute("data-qtoggle");
-  if (!key) return;
-
-  state.ui.collapsedQ = state.ui.collapsedQ || {};
-  state.ui.collapsedQ[key] = !state.ui.collapsedQ[key];
-
-  render();
-  return;
-}
-
-        
       });
-
       return;
     }
 
@@ -1189,8 +1168,12 @@ if (qToggle){
       if (!visit || !key) return;
 
       const d = ensureDraft(visit);
-      const cur = Number(d.answers?.[key] ?? 0);
-      d.answers[key] = Math.max(0, cur - 1);
+
+      const raw = d.answers?.[key];
+      const cur = (typeof raw === "number" && Number.isFinite(raw)) ? raw : Number(raw);
+      const safeCur = Number.isFinite(cur) ? cur : 0;
+
+      d.answers[key] = Math.max(0, safeCur - 1);
       await saveDraft(d);
 
       const qEl = document.querySelector(`.q[data-qtype="number"][data-qkey="${CSS.escape(key)}"]`);
@@ -1208,8 +1191,12 @@ if (qToggle){
       if (!visit || !key) return;
 
       const d = ensureDraft(visit);
-      const cur = Number(d.answers?.[key] ?? 0);
-      d.answers[key] = cur + 1;
+
+      const raw = d.answers?.[key];
+      const cur = (typeof raw === "number" && Number.isFinite(raw)) ? raw : Number(raw);
+      const safeCur = Number.isFinite(cur) ? cur : 0;
+
+      d.answers[key] = safeCur + 1;
       await saveDraft(d);
 
       const qEl = document.querySelector(`.q[data-qtype="number"][data-qkey="${CSS.escape(key)}"]`);
@@ -1416,11 +1403,9 @@ if (qToggle){
       d.answers[key] = next;
       await saveDraft(d);
 
-      // žádný render — jen přepočítej visible count (filtr) když je otevřený
       if (state.ui.openMultiKey === key){
         applyMsFilter(key);
       } else {
-        // fallback: render summary/count pill
         render();
       }
       return;
@@ -1450,14 +1435,25 @@ if (qToggle){
 
     const d = ensureDraft(visit);
 
-    if (type === "text"){ d.answers[key] = t.value ?? ""; await saveDraft(d); return; }
-    if (type === "number"){
-      // u counteru input ručně přepisovat jde, ale nebudeme renderovat — jen uložit
-      const v = t.value;
-      d.answers[key] = (v === "" ? null : Number(v));
+    if (type === "text"){
+      d.answers[key] = t.value ?? "";
       await saveDraft(d);
       return;
     }
+
+    if (type === "number"){
+      // ruční přepis čísla: ulož jen finite number nebo null (0 je OK)
+      const raw = t.value;
+      if (raw === ""){
+        d.answers[key] = null;
+      } else {
+        const n = Number(raw);
+        d.answers[key] = Number.isFinite(n) ? n : null;
+      }
+      await saveDraft(d);
+      return;
+    }
+
     if (type === "select"){
       if (q.getAttribute("data-multi") === "1") return;
       d.answers[key] = t.value || "";
@@ -1506,18 +1502,7 @@ async function boot(){
   await loadDrafts();
 
   if ("serviceWorker" in navigator){
-    navigator.serviceWorker.register("./sw.js")
-      .then(() => {
-        const sub = document.querySelector(".sbSub");
-        if (sub) sub.textContent = "Merch Visits • SW: activated";
-      })
-      .catch(() => {
-        const sub = document.querySelector(".sbSub");
-        if (sub) sub.textContent = "Merch Visits • SW: off";
-      });
-  }
-
-  if ("serviceWorker" in navigator){
+    navigator.serviceWorker.register("./sw.js").catch(()=>{});
     navigator.serviceWorker.addEventListener("controllerchange", () => {
       setTimeout(() => updateSWBadge().catch(()=>{}), 300);
     });
