@@ -767,45 +767,79 @@ function renderQuestion(q, draft){
 
   const req = q.required ? `<span class="req">*</span>` : "";
   const help = q.help ? `<div class="small">${esc(q.help)}</div>` : "";
+    const collapsed = !!(state.ui.collapsedQ && state.ui.collapsedQ[key]);
+  const chev = collapsed ? "▼" : "▲";
+
+  // Pozn.: multiselect už má vlastní toggle (mstoggle), takže tam tenhle wrapper nedáváme
+  function wrapNonMulti(innerHtml){
+    return `
+      <div class="q" data-qtype="${esc(q.type)}" data-qkey="${esc(key)}">
+        <div class="row" style="align-items:center;gap:10px">
+          <div style="flex:1;min-width:200px">
+            <div class="ql" style="margin:0">${esc(q.label)} ${req}</div>
+            ${help}
+          </div>
+          <button class="btn ghost" data-qtoggle="${esc(key)}" aria-expanded="${!collapsed}" style="min-width:44px">
+            ${chev}
+          </button>
+        </div>
+
+        <div class="qBody" style="${collapsed ? "display:none;" : ""}">
+          ${innerHtml}
+        </div>
+      </div>
+    `;
+  }
+
 
   if (q.type === "checkbox"){
-    const selected = (val === true) ? true : (val === false ? false : null);
-    return `
-      <div class="q" data-qtype="checkbox" data-qkey="${esc(key)}">
-        <div class="ql">${esc(q.label)} ${req}</div>
-        ${help}
-        ${checkboxButtons(key, selected)}
-      </div>
-    `;
-  }
+  const selected = (val === true) ? true : (val === false ? false : null);
+
+  return wrapNonMulti(`
+    ${checkboxButtons(key, selected)}
+  `);
+}
+
+
 
   if (q.type === "text"){
-    return `
-      <div class="q" data-qtype="text" data-qkey="${esc(key)}">
-        <div class="ql">${esc(q.label)} ${req}</div>
-        ${help}
-        <textarea>${esc(typeof val === "string" ? val : "")}</textarea>
-      </div>
-    `;
-  }
+  return wrapNonMulti(`
+    <textarea>${esc(typeof val === "string" ? val : "")}</textarea>
+  `);
+}
+
 
   if (q.type === "number"){
     const num = (typeof val === "number" && Number.isFinite(val)) ? val : 0;
     const isCounter = (q.counter === true) || (q.stepper === true);
 
-    if (isCounter){
-      return `
-        <div class="q" data-qtype="number" data-qkey="${esc(key)}" data-counter="1">
-          <div class="ql">${esc(q.label)} ${req}</div>
-          ${help}
+      if (isCounter){
+    const collapsed = !!(state.ui.collapsedQ && state.ui.collapsedQ[key]);
+    const chev = collapsed ? "▼" : "▲";
+
+    return `
+      <div class="q" data-qtype="number" data-qkey="${esc(key)}" data-counter="1">
+        <div class="row" style="align-items:center;gap:10px">
+          <div style="flex:1;min-width:200px">
+            <div class="ql" style="margin:0">${esc(q.label)} ${req}</div>
+            ${help}
+          </div>
+          <button class="btn ghost" data-qtoggle="${esc(key)}" aria-expanded="${!collapsed}" style="min-width:44px">
+            ${chev}
+          </button>
+        </div>
+
+        <div class="qBody" style="${collapsed ? "display:none;" : ""}">
           <div class="row" style="gap:10px;flex-wrap:nowrap">
             <button class="btn ghost" type="button" data-stepminus="${esc(key)}" aria-label="Snížit">−</button>
             <input class="inp" type="number" value="${esc(String(num))}" style="text-align:center" />
             <button class="btn ghost" type="button" data-stepplus="${esc(key)}" aria-label="Zvýšit">+</button>
           </div>
         </div>
-      `;
-    }
+      </div>
+    `;
+  }
+
 
     return `
       <div class="q" data-qtype="number" data-qkey="${esc(key)}">
@@ -817,21 +851,19 @@ function renderQuestion(q, draft){
   }
 
   if (q.type === "select"){
-    if (q.multi === true) return renderMultiSelectQuestion(q, draft);
+  if (q.multi === true) return renderMultiSelectQuestion(q, draft); // multiselect NEobalujeme
 
-    const opts = q.options || [];
-    const v = typeof val === "string" ? val : "";
-    return `
-      <div class="q" data-qtype="select" data-qkey="${esc(key)}">
-        <div class="ql">${esc(q.label)} ${req}</div>
-        ${help}
-        <select class="inp">
-          <option value="">—</option>
-          ${opts.map(o => `<option value="${esc(o)}" ${o===v?"selected":""}>${esc(o)}</option>`).join("")}
-        </select>
-      </div>
-    `;
-  }
+  const opts = q.options || [];
+  const v = typeof val === "string" ? val : "";
+
+  return wrapNonMulti(`
+    <select class="inp">
+      <option value="">—</option>
+      ${opts.map(o => `<option value="${esc(o)}" ${o===v?"selected":""}>${esc(o)}</option>`).join("")}
+    </select>
+  `);
+}
+
 
   if (q.type === "photo") return renderPhotoQuestion(q, draft);
   if (q.type === "furniture_trigger") return renderFurnitureTrigger(q, draft);
