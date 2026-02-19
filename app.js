@@ -14,7 +14,8 @@ const state = {
   // UI state
   ui: {
     openMultiKey: null,    // která multiselect otázka je rozbalená
-    msFilter: {}           // key -> string (filtr pro každou multiselect otázku)
+    msFilter: {},           // key -> string (filtr multiselectu)
+  collapsedQ: {}          // key -> true (sbalené otázky)
   }
 };
 
@@ -1064,6 +1065,20 @@ if (calLabel && calLabel.querySelector('#dayPicker')){
           inp?.focus();
           try { inp?.setSelectionRange(inp.value.length, inp.value.length); } catch {}
         }
+// toggle sbalení otázky (marketshare / counter / klidně i jiné)
+const qToggle = t.closest("[data-qtoggle]");
+if (qToggle){
+  const key = qToggle.getAttribute("data-qtoggle");
+  if (!key) return;
+
+  state.ui.collapsedQ = state.ui.collapsedQ || {};
+  state.ui.collapsedQ[key] = !state.ui.collapsedQ[key];
+
+  render();
+  return;
+}
+
+        
       });
 
       return;
