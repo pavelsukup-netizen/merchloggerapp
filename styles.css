@@ -371,6 +371,17 @@ input[type="file"].inp{
 @media (max-width: 420px){
   .row .btn{ flex: 1 1 auto; } /* on tiny screens buttons will stack nicely */
 }
+button[data-qtoggle]{
+  width: 46px;
+  height: 46px;
+  border-radius: 16px;
+  padding: 0;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  font-weight: 1000;
+}
+
 
 /* =========================
    Questions styling + your color rules
