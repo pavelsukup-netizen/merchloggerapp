@@ -46,7 +46,16 @@ function toast(msg){
   console.log("[mobile]", msg);
   alert(msg);
 }
-
+function toFiniteNumberOrNull(v){
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string"){
+    const s = v.trim();
+    if (s === "") return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
 /* ----------------- jobpack validation ----------------- */
 function validateJobPack(pack){
   const errors = [];
@@ -1174,7 +1183,8 @@ function bindEvents(){
       const d = ensureDraft(visit);
 
       const raw = d.answers?.[key];
-      const cur = (typeof raw === "number" && Number.isFinite(raw)) ? raw : Number(raw);
+      const cur = toFiniteNumberOrNull(d.answers?.[key]);
+d.answers[key] = (cur === null ? 0 : cur) + 1;
       const safeCur = Number.isFinite(cur) ? cur : 0;
 
       d.answers[key] = Math.max(0, safeCur - 1);
@@ -1197,7 +1207,8 @@ function bindEvents(){
       const d = ensureDraft(visit);
 
       const raw = d.answers?.[key];
-      const cur = (typeof raw === "number" && Number.isFinite(raw)) ? raw : Number(raw);
+      const cur = toFiniteNumberOrNull(d.answers?.[key]);
+d.answers[key] = Math.max(0, (cur === null ? 0 : cur) - 1);
       const safeCur = Number.isFinite(cur) ? cur : 0;
 
       d.answers[key] = safeCur + 1;
@@ -1446,11 +1457,10 @@ function bindEvents(){
     }
 
     if (type === "number"){
-      const v = t.value;
-      d.answers[key] = (v === "" ? null : Number(v));
-      await saveDraft(d);
-      return;
-    }
+  d.answers[key] = toFiniteNumberOrNull(t.value);
+  await saveDraft(d);
+  return;
+}
 
     if (type === "select"){
       if (q.getAttribute("data-multi") === "1") return;
