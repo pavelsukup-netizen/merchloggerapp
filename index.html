@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Merch Visits – Mobile Logger</title>
 
-  <link rel="manifest" href="./manifest.json?v=45" />
-  <link rel="stylesheet" href="./styles.css?v=45" />
+  <link rel="manifest" href="./manifest.json?v=46" />
+  <link rel="stylesheet" href="./styles.css?v=46" />
   <meta name="theme-color" content="#eef1f5" />
 </head>
 
@@ -20,7 +20,7 @@
         <div class="sbTitle">Mobile Logger</div>
         <div class="sbSub">
           <span class="muted">Merch Visits •</span>
-          <span id="appVer">App: 2026-07-45</span>
+          <span id="appVer">App: 2026-07-46</span>
           <span class="muted">•</span>
           <span id="swVer">SW: —</span>
           <span class="muted">• PWA • offline-ready</span>
@@ -39,10 +39,19 @@
     </div>
   </header>
 
-  <!--- App root --->
+  <!-- App root -->
   <main id="app" class="app"></main>
 
+  <script>
+    window.addEventListener("error", function (event) {
+      var root = document.querySelector("#app");
+      if (root && !root.innerHTML.trim()) {
+        root.innerHTML = '<div class="card"><h2>Aplikaci se nepodařilo načíst</h2><p class="small">' +
+          String(event.message || "Chyba při načítání aplikace") + '</p><button class="btn primary" onclick="location.reload()">Obnovit aplikaci</button></div>';
+      }
+    });
+  </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <script type="module" src="./app.js?v=45"></script>
+  <script type="module" src="./app.bundle.js?v=46"></script>
 </body>
 </html>
