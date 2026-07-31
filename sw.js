@@ -1,12 +1,13 @@
-const SW_VERSION = "2026-02-43";
+const SW_VERSION = "2026-07-44";
 // sw.js — cache + offline. BUMP VER při každé změně souborů.
-const CACHE = "mv_mobile_logger_v43";
+const CACHE = "mv_mobile_logger_v44";
 
 const ASSETS = [
   "./",
   "./index.html",
   "./styles.css",
   "./app.js",
+  "./jobpack.js",
   "./idb.js",
   "./manifest.json",
   "https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
