@@ -1,6 +1,12 @@
 import { IDB } from "./idb.js";
+import {
+  getDayExportState,
+  isQuestionVisible,
+  pruneHiddenAnswers,
+  validateJobPack,
+  visibleAnswers
+} from "./jobpack.js";
 
-const JOBPACK_SCHEMA = "merch.jobpack";
 const RESULTS_SCHEMA = "merch.results";
 const SCHEMA_VERSION = 1;
 
@@ -56,50 +62,6 @@ function toFiniteNumberOrNull(v){
   }
   return null;
 }
-/* ----------------- jobpack validation ----------------- */
-function validateJobPack(pack){
-  const errors = [];
-  if (!pack || pack.schema !== JOBPACK_SCHEMA || pack.schemaVersion !== 1){
-    errors.push(`schema/schemaVersion nesedí (čekám ${JOBPACK_SCHEMA} v1)`);
-    return errors;
-  }
-  if (!pack.packId) errors.push("Chybí packId");
-  if (!pack.createdAt) errors.push("Chybí createdAt");
-  if (!pack.merch?.id) errors.push("Chybí merch.id");
-  if (!Array.isArray(pack.stores) || !pack.stores.length) errors.push("Chybí stores[]");
-  if (!Array.isArray(pack.templates) || !pack.templates.length) errors.push("Chybí templates[]");
-  if (!Array.isArray(pack.visits) || !pack.visits.length) errors.push("Chybí visits[]");
-
-  const storeSet = new Set((pack.stores||[]).map(s => s.sapId));
-  const tplSet = new Set((pack.templates||[]).map(t => t.templateId));
-
-  for (const v of (pack.visits||[])){
-    if (!v.visitId) errors.push("Visit bez visitId");
-    if (!v.sapId) errors.push(`Visit ${v.visitId||"(no id)"} bez sapId`);
-    if (!v.templateId) errors.push(`Visit ${v.visitId||"(no id)"} bez templateId`);
-    if (!v.date) errors.push(`Visit ${v.visitId||"(no id)"} bez date`);
-    if (v.sapId && !storeSet.has(v.sapId)) errors.push(`Visit ${v.visitId} odkazuje na neznámý store sapId: ${v.sapId}`);
-    if (v.templateId && !tplSet.has(v.templateId)) errors.push(`Visit ${v.visitId} odkazuje na neznámý templateId: ${v.templateId}`);
-  }
-
-  for (const t of (pack.templates||[])){
-    const keys = new Set();
-    const dups = new Set();
-    for (const b of (t.blocks||[])){
-      for (const q of (b.questions||[])){
-        if (!q.key) errors.push(`Template ${t.templateId}: otázka bez key`);
-        if (q.key){
-          if (keys.has(q.key)) dups.add(q.key);
-          keys.add(q.key);
-        }
-      }
-    }
-    if (dups.size) errors.push(`Template ${t.templateId}: duplicitní question.key: ${[...dups].join(", ")}`);
-  }
-
-  return errors;
-}
-
 /* ----------------- persistence ----------------- */
 async function loadDeviceId(){
   let did = await IDB.get(IDB.STORES.meta, "deviceId");
@@ -130,13 +92,21 @@ function tplById(tid){
 
 function ensureDraft(visit){
   const existing = state.drafts.get(visit.visitId);
-  if (existing) return existing;
+  const existingBelongsToPack = state.pack?.schemaVersion === 1 || existing?.packId === state.pack?.packId;
+  if (existing && existingBelongsToPack) {
+    const store = storeBySap(visit.sapId);
+    existing.retailerId = store?.retailerId || existing.retailerId || "";
+    existing.storeName = store?.name || existing.storeName || "";
+    existing.answers = existing.answers || {};
+    return existing;
+  }
 
   const st = storeBySap(visit.sapId);
   const tpl = tplById(visit.templateId);
 
   const d = {
     schemaVersion: 1,
+    packId: state.pack?.packId || null,
     visitId: visit.visitId,
     sapId: visit.sapId,
     date: visit.date,
@@ -158,8 +128,21 @@ function ensureDraft(visit){
 }
 
 async function saveDraft(d){
+  const tpl = tplById(d.templateId);
+  if (tpl) pruneHiddenAnswers(tpl, d, state.pack?.schemaVersion || 1);
   await IDB.set(IDB.STORES.drafts, d.visitId, d);
   state.drafts.set(d.visitId, d);
+}
+
+function setDraftAnswer(draft, key, value){
+  const isEmptyString = typeof value === "string" && value.trim() === "";
+  const isEmptyArray = Array.isArray(value) && value.length === 0;
+  const isEmptyPhoto = value && typeof value === "object" && Array.isArray(value.photoIds) && value.photoIds.length === 0;
+  if (value === null || value === undefined || isEmptyString || isEmptyArray || isEmptyPhoto) {
+    delete draft.answers[key];
+  } else {
+    draft.answers[key] = value;
+  }
 }
 
 /* ----------------- photos ----------------- */
@@ -265,55 +248,6 @@ function collectQuestions(tpl){
   }
   return out;
 }
-function getAnswerValue(draft, key){
-  return (draft?.answers || {})[key];
-}
-
-function normalizeCond(cond){
-  let op = cond?.op;
-  let value = cond?.value;
-
-  if (!op && cond && cond.equals !== undefined) { op = "eq"; value = cond.equals; }
-  if (!op && cond && cond.notEquals !== undefined) { op = "neq"; value = cond.notEquals; }
-
-  if (value === "ANO") value = true;
-  if (value === "NE") value = false;
-
-  return { ...cond, op, value };
-}
-
-function evalCond(draft, condRaw){
-  const cond = normalizeCond(condRaw || {});
-  const v = getAnswerValue(draft, cond.key);
-
-  switch (cond.op) {
-    case "eq":
-      if (Array.isArray(v)) return v.includes(cond.value);
-      return v === cond.value;
-    case "neq":
-      if (Array.isArray(v)) return !v.includes(cond.value);
-      return v !== cond.value;
-    case "in":
-      if (!Array.isArray(cond.value)) return false;
-      if (Array.isArray(v)) return v.some(x => cond.value.includes(x));
-      return cond.value.includes(v);
-    case "truthy":
-      if (Array.isArray(v)) return v.length > 0;
-      if (typeof v === "boolean") return v === true;
-      if (typeof v === "string") return v.trim().length > 0;
-      if (v && typeof v === "object" && Array.isArray(v.photoIds)) return v.photoIds.length > 0;
-      return !!v;
-    case "falsy":
-      if (Array.isArray(v)) return v.length === 0;
-      if (typeof v === "boolean") return v === false;
-      if (typeof v === "string") return v.trim().length === 0;
-      if (v && typeof v === "object" && Array.isArray(v.photoIds)) return v.photoIds.length === 0;
-      return !v;
-    default:
-      return true;
-  }
-}
-
 function isQuestionForPartner(draft, q){
   const ids = q?.partnerIds;
   if (!Array.isArray(ids) || ids.length === 0) return true;
@@ -323,12 +257,7 @@ function isQuestionForPartner(draft, q){
 }
 
 function isQuestionActive(draft, q){
-  const d = q?.dependsOn;
-  if (!d) return true;
-  if (d.key) return evalCond(draft, d);
-  if (Array.isArray(d.all)) return d.all.every(c => evalCond(draft, c));
-  if (Array.isArray(d.any)) return d.any.some(c => evalCond(draft, c));
-  return true;
+  return isQuestionVisible(q, draft?.answers || {}, draft?.retailerId || "", state.pack?.schemaVersion || 1);
 }
 
 /* ----------------- SW version badge ----------------- */
@@ -408,6 +337,7 @@ function applyMsFilter(key){
 function render(){
   const root = rootEl();
   const date = state.uiDate || todayLocal();
+  const dayExport = state.pack ? getDayExportState(state.pack, state.drafts, date) : null;
 
   syncTopbarDate(date);
 
@@ -466,6 +396,10 @@ function render(){
           <div class="row" style="margin-top:10px">
             <span class="pill">merch: ${esc(state.pack.merch?.id)}</span>
             <span class="pill">packId: ${esc(state.pack.packId)}</span>
+            <span class="pill">jobpack v${esc(state.pack.schemaVersion)}</span>
+            <span class="pill ${dayExport.unresolved.length ? "warn" : "ok"}">
+              uzavřeno ${dayExport.scheduled.length - dayExport.unresolved.length}/${dayExport.scheduled.length}
+            </span>
           </div>
         ` : ``}
 
@@ -976,15 +910,33 @@ async function exportDayZip(date){
   if (typeof window.JSZip !== "function"){ toast("JSZip není dostupný."); return; }
 
   const merchId = state.pack.merch?.id || "unknown";
-  const drafts = [...state.drafts.values()].filter(d => d.date === date && (d.status === "done" || d.status === "cancelled"));
-  if (!drafts.length){ toast("Na tenhle den nemáš žádný DONE/CANCELLED návštěvy."); return; }
+  const dayExport = getDayExportState(state.pack, state.drafts, date);
+  if (!dayExport.scheduled.length){ toast("Na tenhle den nejsou naplánované žádné návštěvy."); return; }
+  if (dayExport.unresolved.length){
+    const stores = dayExport.unresolved.slice(0, 5).map(visit => storeBySap(visit.sapId)?.name || visit.sapId);
+    const more = dayExport.unresolved.length > stores.length ? ` a dalších ${dayExport.unresolved.length - stores.length}` : "";
+    toast(`Export zablokován. Nejdřív dokonči nebo zruš všech ${dayExport.unresolved.length} rozpracovaných návštěv: ${stores.join(", ")}${more}.`);
+    return;
+  }
+
+  const drafts = dayExport.resolvedDrafts;
+  const exportAnswers = new Map();
+  for (const draft of drafts){
+    const template = tplById(draft.templateId);
+    if (!template){ toast(`Export zablokován: chybí checklist ${draft.templateId}.`); return; }
+    const store = storeBySap(draft.sapId);
+    draft.retailerId = store?.retailerId || draft.retailerId || "";
+    pruneHiddenAnswers(template, draft, state.pack.schemaVersion || 1);
+    exportAnswers.set(draft.visitId, visibleAnswers(template, draft, state.pack.schemaVersion || 1));
+    await saveDraft(draft);
+  }
 
   const exportId = uuid();
   const createdAt = nowISO();
 
   const photoSet = new Set();
   for (const d of drafts){
-    for (const vv of Object.values(d.answers || {})){
+    for (const vv of Object.values(exportAnswers.get(d.visitId) || {})){
       if (vv && typeof vv === "object" && Array.isArray(vv.photoIds)) vv.photoIds.forEach(pid => photoSet.add(pid));
     }
     for (const o of (d.furnitureObservations || [])){
@@ -1029,7 +981,7 @@ async function exportDayZip(date){
       cancelReason: d.status === "cancelled" ? (d.cancelReason || "") : undefined,
       templateId: d.templateId,
       templateVersion: d.templateVersion,
-      answers: d.answers || {},
+      answers: exportAnswers.get(d.visitId) || {},
       furnitureObservations: (d.furnitureObservations || []).map(o => ({
         id: o.id,
         typeId: "ATYP",
@@ -1145,7 +1097,7 @@ function bindEvents(){
 
     if (t.id === "btnExport"){
       const d = $("#dayPicker")?.value || state.uiDate || todayLocal();
-      exportDayZip(d);
+      await exportDayZip(d);
       return;
     }
 
@@ -1166,7 +1118,7 @@ function bindEvents(){
       const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
       if (!visit || !key) return;
       const d = ensureDraft(visit);
-      d.answers[key] = val;
+      setDraftAnswer(d, key, val);
       await saveDraft(d);
       render();
       return;
@@ -1182,17 +1134,12 @@ function bindEvents(){
 
       const d = ensureDraft(visit);
 
-      const raw = d.answers?.[key];
       const cur = toFiniteNumberOrNull(d.answers?.[key]);
-d.answers[key] = (cur === null ? 0 : cur) + 1;
       const safeCur = Number.isFinite(cur) ? cur : 0;
 
-      d.answers[key] = Math.max(0, safeCur - 1);
+      setDraftAnswer(d, key, Math.max(0, safeCur - 1));
       await saveDraft(d);
-
-      const qEl = document.querySelector(`.q[data-qtype="number"][data-qkey="${CSS.escape(key)}"]`);
-      const inp = qEl?.querySelector('input[type="number"]');
-      if (inp) inp.value = String(d.answers[key]);
+      render();
       return;
     }
 
@@ -1206,17 +1153,12 @@ d.answers[key] = (cur === null ? 0 : cur) + 1;
 
       const d = ensureDraft(visit);
 
-      const raw = d.answers?.[key];
       const cur = toFiniteNumberOrNull(d.answers?.[key]);
-d.answers[key] = Math.max(0, (cur === null ? 0 : cur) - 1);
       const safeCur = Number.isFinite(cur) ? cur : 0;
 
-      d.answers[key] = safeCur + 1;
+      setDraftAnswer(d, key, safeCur + 1);
       await saveDraft(d);
-
-      const qEl = document.querySelector(`.q[data-qtype="number"][data-qkey="${CSS.escape(key)}"]`);
-      const inp = qEl?.querySelector('input[type="number"]');
-      if (inp) inp.value = String(d.answers[key]);
+      render();
       return;
     }
 
@@ -1243,7 +1185,7 @@ d.answers[key] = Math.max(0, (cur === null ? 0 : cur) - 1);
       const toAdd = files.slice(0, remaining);
 
       const newIds = await addPhotosToDB(toAdd, visitId);
-      d.answers[key] = { photoIds: [...ids, ...newIds] };
+      setDraftAnswer(d, key, { photoIds: [...ids, ...newIds] });
       await saveDraft(d);
       render();
       return;
@@ -1261,7 +1203,7 @@ d.answers[key] = Math.max(0, (cur === null ? 0 : cur) - 1);
       const d = ensureDraft(visit);
       const cur = d.answers[key];
       const ids = (cur && typeof cur === "object" && Array.isArray(cur.photoIds)) ? cur.photoIds : [];
-      d.answers[key] = { photoIds: ids.filter(x => x !== pid) };
+      setDraftAnswer(d, key, { photoIds: ids.filter(x => x !== pid) });
       await saveDraft(d);
       render();
       return;
@@ -1415,14 +1357,9 @@ d.answers[key] = Math.max(0, (cur === null ? 0 : cur) - 1);
         ? Array.from(new Set([...arr, opt]))
         : arr.filter(x => x !== opt);
 
-      d.answers[key] = next;
+      setDraftAnswer(d, key, next);
       await saveDraft(d);
-
-      if (state.ui.openMultiKey === key){
-        applyMsFilter(key);
-      } else {
-        render();
-      }
+      render();
       return;
     }
 
@@ -1432,7 +1369,7 @@ d.answers[key] = Math.max(0, (cur === null ? 0 : cur) - 1);
       const visit = (state.pack?.visits||[]).find(v => v.visitId === visitId);
       if (!visit || !key) return;
       const d = ensureDraft(visit);
-      d.answers[key] = t.value || "";
+      setDraftAnswer(d, key, t.value || null);
       await saveDraft(d);
       render();
       return;
@@ -1451,21 +1388,23 @@ d.answers[key] = Math.max(0, (cur === null ? 0 : cur) - 1);
     const d = ensureDraft(visit);
 
     if (type === "text"){
-      d.answers[key] = t.value ?? "";
+      setDraftAnswer(d, key, t.value ?? null);
       await saveDraft(d);
       return;
     }
 
     if (type === "number"){
-  d.answers[key] = toFiniteNumberOrNull(t.value);
-  await saveDraft(d);
-  return;
-}
+      setDraftAnswer(d, key, toFiniteNumberOrNull(t.value));
+      await saveDraft(d);
+      render();
+      return;
+    }
 
     if (type === "select"){
       if (q.getAttribute("data-multi") === "1") return;
-      d.answers[key] = t.value || "";
+      setDraftAnswer(d, key, t.value || null);
       await saveDraft(d);
+      render();
       return;
     }
 
