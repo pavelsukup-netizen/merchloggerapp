@@ -20,7 +20,7 @@ const state = {
 
   // UI state
   ui: {
-    openMultiKey: null,     // která multiselect otázka je rozbalená
+    openMultiKey: null,     // která multiselect otázka fakt je rozbalená
     msFilter: {},           // key -> string (filtr multiselectu)
     collapsedBlocks: {}     // blockKey -> true (sbaleno)
   }
