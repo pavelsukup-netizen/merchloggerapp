@@ -1,14 +1,15 @@
-import { IDB } from "./idb.js";
+import { IDB } from "./idb.js?v=45";
 import {
   getDayExportState,
   isQuestionVisible,
   pruneHiddenAnswers,
   validateJobPack,
   visibleAnswers
-} from "./jobpack.js";
+} from "./jobpack.js?v=45";
 
 const RESULTS_SCHEMA = "merch.results";
 const SCHEMA_VERSION = 1;
+const APP_VERSION = "2026-07-45";
 
 const state = {
   pack: null,
@@ -411,8 +412,18 @@ function render(){
 
         <div class="row" style="margin-top:12px">
           <button class="btn primary" id="btnImport">Import</button>
-          <button class="btn ok" id="btnExport" ${state.pack ? "" : "disabled"}>Export denního ZIP</button>
+          <button class="btn ok" id="btnExport"
+                  ${state.pack && dayExport?.scheduled.length > 0 && dayExport?.unresolved.length === 0 ? "" : "disabled"}
+                  title="${state.pack && dayExport?.unresolved.length ? `Zbývá uzavřít ${dayExport.unresolved.length} návštěv` : "Export denního ZIP"}">
+            Export denního ZIP
+          </button>
         </div>
+
+        ${state.pack && dayExport?.unresolved.length ? `
+          <div class="small" style="margin-top:10px;color:#b45309;font-weight:800">
+            🔒 Export je zamčený — dokonči nebo zruš ještě ${dayExport.unresolved.length} ${dayExport.unresolved.length === 1 ? "návštěvu" : "návštěv"}.
+          </div>
+        ` : ``}
 
         <div class="small" style="margin-top:10px; opacity:.9">
           Tip: Datum vybíráš nahoře přes 📅 v liště.
@@ -994,6 +1005,14 @@ async function exportDayZip(date){
     }))
   };
 
+  // Druhá fail-closed kontrola těsně před vytvořením ZIPu. Chrání i proti
+  // změně stavu během asynchronního načítání fotografií.
+  const finalCheck = getDayExportState(state.pack, state.drafts, date);
+  if (finalCheck.unresolved.length || finalCheck.scheduled.length !== drafts.length){
+    toast("Export zablokován: stav návštěv se změnil. Zkontroluj, že jsou všechny dokončené nebo zrušené.");
+    return;
+  }
+
   zip.file("manifest.json", JSON.stringify(manifest, null, 2));
   const blob = await zip.generateAsync({ type: "blob" });
 
@@ -1450,13 +1469,15 @@ async function boot(){
 
   if ("serviceWorker" in navigator){
     navigator.serviceWorker.register("./sw.js")
-      .then(() => {
-        const sub = document.querySelector(".sbSub");
-        if (sub) sub.textContent = "Merch Visits • SW: activated";
+      .then(registration => {
+        registration.update().catch(()=>{});
+        const appVer = document.querySelector("#appVer");
+        if (appVer) appVer.textContent = `App: ${APP_VERSION}`;
+        updateSWBadge().catch(()=>{});
       })
       .catch(() => {
-        const sub = document.querySelector(".sbSub");
-        if (sub) sub.textContent = "Merch Visits • SW: off";
+        const swVer = document.querySelector("#swVer");
+        if (swVer) swVer.textContent = "SW: off";
       });
   }
 
