@@ -1,15 +1,15 @@
-import { IDB } from "./idb.js?v=45";
+import { IDB } from "./idb.js";
 import {
   getDayExportState,
   isQuestionVisible,
   pruneHiddenAnswers,
   validateJobPack,
   visibleAnswers
-} from "./jobpack.js?v=45";
+} from "./jobpack.js";
 
 const RESULTS_SCHEMA = "merch.results";
 const SCHEMA_VERSION = 1;
-const APP_VERSION = "2026-07-45";
+const APP_VERSION = "2026-07-46";
 
 const state = {
   pack: null,
@@ -20,7 +20,7 @@ const state = {
 
   // UI state
   ui: {
-    openMultiKey: null,     // která multiselect otázka fakt je rozbalená
+    openMultiKey: null,     // která multiselect otázka je rozbalená
     msFilter: {},           // key -> string (filtr multiselectu)
     collapsedBlocks: {}     // blockKey -> true (sbaleno)
   }
@@ -1492,4 +1492,15 @@ async function boot(){
   render();
   bindEvents();
 }
-boot();
+boot().catch(error => {
+  console.error("[mobile] Kritická chyba při startu aplikace:", error);
+  const root = rootEl();
+  root.innerHTML = `
+    <div class="card">
+      <h2>Aplikaci se nepodařilo spustit</h2>
+      <p class="small">Načítání skončilo chybou. Obnov stránku; pokud problém zůstane, zkontroluj, že je nasazená verze ${esc(APP_VERSION)}.</p>
+      <pre style="white-space:pre-wrap;word-break:break-word">${esc(error?.message || error || "Neznámá chyba")}</pre>
+      <button class="btn primary" type="button" onclick="location.reload()">Obnovit aplikaci</button>
+    </div>
+  `;
+});
